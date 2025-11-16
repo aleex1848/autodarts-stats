@@ -11,5 +11,6 @@ php artisan optimize:clear
 touch /app/storage/logs/laravel.log
 chmod 666 /app/storage/logs/laravel.log
 #cp -f composer.lock /app/storage/app/non-public/composer.lock
+npm install
 npm run build --production
 php artisan optimize
