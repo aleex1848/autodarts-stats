@@ -14,8 +14,7 @@ class WebhookProcessing extends ProcessWebhookJob
         {
             Log::debug('Webhook processed successfully', [
                 'request' => $request->all()
-            ]);
-            return response()->json(['message' => 'Webhook processed successfully']);
+            ]);            
         }
 
     
