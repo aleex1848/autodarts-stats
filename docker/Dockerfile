@@ -5,4 +5,7 @@ RUN apk add nano nodejs npm
 COPY --chown=1000:1000 . /app
 WORKDIR /opt/docker
 COPY --chown=1000:1000 docker/php-nginx-app/ .
+COPY --chown=1000:1000 docker/php-nginx-cron/ .
+COPY --chown=1000:1000 docker/php-nginx-queue/ .
+#COPY --chown=1000:1000 docker/php-nginx-websockets/ .
 
