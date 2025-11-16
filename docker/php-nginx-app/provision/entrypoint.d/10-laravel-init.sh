@@ -1,0 +1,13 @@
+#!/bin/sh
+cd /app
+#php artisan telescope:install
+#php artisan horizon:publish
+php artisan migrate --force
+php artisan optimize:clear
+#php artisan optimize
+#config:clear damit env() im code wieder funktioniert.
+#php artisan config:clear
+touch /app/storage/logs/laravel.log
+chmod 666 /app/storage/logs/laravel.log
+#cp -f composer.lock /app/storage/app/non-public/composer.lock
+npm run build --production
