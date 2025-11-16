@@ -1,0 +1,17 @@
+{
+    "name": "autodarts-stats Dev",
+    "dockerComposeFile": [
+      "../../docker-compose.yml"
+    ],
+    "service": "app",
+    "workspaceFolder": "/app",
+    // "remoteUser": "application",
+    // "updateRemoteUserUID": false,
+    // "overrideCommand": true,
+    "runServices": ["app", "mariadb", "redis", "phpmyadmin"],
+    "shutdownAction": "stopCompose"
+    // "mounts": [
+    //   "source=${env:HOME}/.ssh,target=/home/application/.ssh,type=bind"
+    // ]
+  }
+ 
