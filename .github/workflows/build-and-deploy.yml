@@ -15,7 +15,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      - name: Login to GHCR (with PAT)
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Login to GHCR (with GITHUB_TOKEN)
+        if: ${{ secrets.GHCR_TOKEN == '' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
