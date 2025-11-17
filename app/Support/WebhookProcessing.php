@@ -8,14 +8,7 @@ use Illuminate\Http\Request;
 use Spatie\WebhookClient\WebhookConfig;
 
 class WebhookProcessing extends ProcessWebhookJob
-{
-    
-        public function respondToValidWebhook(Request $request, WebhookConfig $config)
-        {
-            Log::debug('Webhook processed successfully', [
-                'request' => $request->all()
-            ]);            
-        }
+{            
 
         public function handle()
         {
