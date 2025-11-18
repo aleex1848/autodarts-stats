@@ -170,19 +170,17 @@ class WebhookProcessing extends ProcessWebhookJob
                     $dartsThrown = isset($matchStats['dartsThrown']) ? (int) $matchStats['dartsThrown'] : null;
                 }
 
-                // Sync pivot table
-                $match->players()->syncWithoutDetaching([
-                    $player->id => [
-                        'player_index' => $index,
-                        'legs_won' => $matchData['scores'][$index]['legs'] ?? 0,
-                        'sets_won' => $matchData['scores'][$index]['sets'] ?? 0,
-                        'match_average' => $matchAverage,
-                        'checkout_rate' => $checkoutRate,
-                        'checkout_attempts' => $checkoutAttempts,
-                        'checkout_hits' => $checkoutHits,
-                        'total_180s' => $total180s ?? 0,
-                        'darts_thrown' => $dartsThrown,
-                    ],
+                // Sync pivot table with retry logic to handle race conditions
+                $this->syncMatchPlayerWithRetry($match, $player->id, [
+                    'player_index' => $index,
+                    'legs_won' => $matchData['scores'][$index]['legs'] ?? 0,
+                    'sets_won' => $matchData['scores'][$index]['sets'] ?? 0,
+                    'match_average' => $matchAverage,
+                    'checkout_rate' => $checkoutRate,
+                    'checkout_attempts' => $checkoutAttempts,
+                    'checkout_hits' => $checkoutHits,
+                    'total_180s' => $total180s ?? 0,
+                    'darts_thrown' => $dartsThrown,
                 ]);
             }
 
@@ -427,6 +425,74 @@ class WebhookProcessing extends ProcessWebhookJob
 
         // Final fallback: try to find the throw (it might exist now)
         return DartThrow::where('autodarts_throw_id', $throwId)->first();
+    }
+
+    protected function syncMatchPlayerWithRetry(DartMatch $match, int $playerId, array $pivotData, int $maxAttempts = 3): void
+    {
+        $attempts = 0;
+
+        while ($attempts < $maxAttempts) {
+            try {
+                // Check if player is already attached to this match
+                $existingPivot = DB::table('match_player')
+                    ->where('match_id', $match->id)
+                    ->where('player_id', $playerId)
+                    ->first();
+
+                if ($existingPivot) {
+                    // Update existing pivot record
+                    DB::table('match_player')
+                        ->where('match_id', $match->id)
+                        ->where('player_id', $playerId)
+                        ->update(array_merge($pivotData, ['updated_at' => now()]));
+                } else {
+                    // Use syncWithoutDetaching to create/update
+                    $match->players()->syncWithoutDetaching([
+                        $playerId => $pivotData,
+                    ]);
+                }
+
+                return;
+            } catch (DeadlockException|QueryException|\PDOException $e) {
+                $attempts++;
+
+                $errorMessage = $e->getMessage();
+                $errorCode = $e->getCode();
+
+                $isDeadlockError = $e instanceof DeadlockException
+                    || $errorCode === 'HY000'
+                    || $errorCode === 0
+                    || str_contains($errorMessage, '1020')
+                    || str_contains($errorMessage, 'Record has changed since last read')
+                    || str_contains($errorMessage, 'Deadlock');
+
+                if ($isDeadlockError && $attempts < $maxAttempts) {
+                    // Wait a bit before retrying (exponential backoff with jitter)
+                    $delay = (50000 * $attempts) + random_int(0, 10000); // 50ms, 100ms + jitter
+                    usleep($delay);
+
+                    continue;
+                }
+
+                // If it's not a retryable error or we've exhausted attempts, rethrow
+                throw $e;
+            }
+        }
+
+        // Final fallback: try direct update using DB facade
+        try {
+            DB::table('match_player')
+                ->where('match_id', $match->id)
+                ->where('player_id', $playerId)
+                ->update(array_merge($pivotData, ['updated_at' => now()]));
+        } catch (\Exception $e) {
+            // Log but don't throw - the record might have been updated by another process
+            Log::warning('Failed to sync match_player after retries', [
+                'match_id' => $match->id,
+                'player_id' => $playerId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function findOrCreatePlayer(string $userId, string $name, array $additionalValues = []): Player
