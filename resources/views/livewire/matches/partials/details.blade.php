@@ -80,25 +80,31 @@
 
             <dl class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
                 <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('Basisscore') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->base_score ?? '—' }}</dd>
+                    <dt class="font-medium text-zinc-500">{{ __('Variante') }}</dt>
+                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->variant ?? '—' }}</dd>
                 </div>
-                <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('In-Mode') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->in_mode ?? '—' }}</dd>
-                </div>
-                <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('Out-Mode') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->out_mode ?? '—' }}</dd>
-                </div>
-                <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
-                </div>
-                <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('Max. Runden') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->max_rounds ?? '—' }}</dd>
-                </div>
+                @if ($match->variant === 'X01')
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('Basisscore') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->base_score ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('In-Mode') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->in_mode ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('Out-Mode') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->out_mode ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('Max. Runden') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->max_rounds ?? '—' }}</dd>
+                    </div>
+                @endif
             </dl>
         </div>
 
@@ -136,10 +142,14 @@
                                         <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
                                             <tr>
                                                 <th class="px-3 py-2 text-left">{{ __('Spieler') }}</th>
-                                                <th class="px-3 py-2 text-right">{{ __('Average') }}</th>
-                                                <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
-                                                <th class="px-3 py-2 text-right">{{ __('Checkout %') }}</th>
-                                                <th class="px-3 py-2 text-right">{{ __('BUST') }}</th>
+                                                @if ($match->variant === 'X01')
+                                                    <th class="px-3 py-2 text-right">{{ __('Average') }}</th>
+                                                    <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
+                                                    <th class="px-3 py-2 text-right">{{ __('Checkout %') }}</th>
+                                                    <th class="px-3 py-2 text-right">{{ __('BUST') }}</th>
+                                                @else
+                                                    <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
+                                                @endif
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
@@ -148,37 +158,47 @@
                                                     <td class="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
                                                         {{ $player->name }}
                                                     </td>
-                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->average))
-                                                            {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->darts_thrown))
-                                                            {{ $player->pivot->darts_thrown }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->checkout_rate))
-                                                            {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
-                                                            @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
-                                                                ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                                    @if ($match->variant === 'X01')
+                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                            @if (! is_null($player->pivot->average))
+                                                                {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
+                                                            @else
+                                                                —
                                                             @endif
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
-                                                            <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
-                                                        @else
-                                                            0
-                                                        @endif
-                                                    </td>
+                                                        </td>
+                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                            @if (! is_null($player->pivot->darts_thrown))
+                                                                {{ $player->pivot->darts_thrown }}
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                            @if (! is_null($player->pivot->checkout_rate))
+                                                                {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                                                @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                                                    ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                                                @endif
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                            @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                                                <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
+                                                            @else
+                                                                0
+                                                            @endif
+                                                        </td>
+                                                    @else
+                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                            @if (! is_null($player->pivot->darts_thrown))
+                                                                {{ $player->pivot->darts_thrown }}
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
+                                                    @endif
                                                 </tr>
                                             @endforeach
                                         </tbody>
@@ -211,11 +231,15 @@
                         <th class="px-4 py-3 text-left">{{ __('Spieler') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Legs') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Sets') }}</th>
-                        <th class="px-4 py-3 text-left">{{ __('Average') }}</th>
-                        <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
-                        <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
-                        <th class="px-4 py-3 text-left">{{ __('BUST') }}</th>
-                        <th class="px-4 py-3 text-left">{{ __('180er') }}</th>
+                        @if ($match->variant === 'X01')
+                            <th class="px-4 py-3 text-left">{{ __('Average') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('BUST') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('180er') }}</th>
+                        @else
+                            <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
+                        @endif
                         <th class="px-4 py-3 text-left">{{ __('Platzierung') }}</th>
                     </tr>
                 </thead>
@@ -237,38 +261,48 @@
                             </td>
                             <td class="px-4 py-3">{{ $player->pivot->legs_won ?? '—' }}</td>
                             <td class="px-4 py-3">{{ $player->pivot->sets_won ?? '—' }}</td>
-                            <td class="px-4 py-3">
-                                @if (! is_null($player->pivot->match_average))
-                                    {{ number_format((float) $player->pivot->match_average, 2, ',', '.') }}
-                                @else
-                                    —
-                                @endif
-                            </td>
-                            <td class="px-4 py-3">
-                                @if (! is_null($player->pivot->darts_thrown))
-                                    {{ $player->pivot->darts_thrown }}
-                                @else
-                                    —
-                                @endif
-                            </td>
-                            <td class="px-4 py-3">
-                                @if (! is_null($player->pivot->checkout_rate))
-                                    {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
-                                    @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
-                                        ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                            @if ($match->variant === 'X01')
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->match_average))
+                                        {{ number_format((float) $player->pivot->match_average, 2, ',', '.') }}
+                                    @else
+                                        —
                                     @endif
-                                @else
-                                    —
-                                @endif
-                            </td>
-                            <td class="px-4 py-3">
-                                @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
-                                    <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
-                                @else
-                                    0
-                                @endif
-                            </td>
-                            <td class="px-4 py-3">{{ $player->pivot->total_180s ?? 0 }}</td>
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->darts_thrown))
+                                        {{ $player->pivot->darts_thrown }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->checkout_rate))
+                                        {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                        @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                            ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                        @endif
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                        <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
+                                    @else
+                                        0
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">{{ $player->pivot->total_180s ?? 0 }}</td>
+                            @else
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->darts_thrown))
+                                        {{ $player->pivot->darts_thrown }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                            @endif
                             <td class="px-4 py-3">
                                 @if ($player->pivot->final_position)
                                     <flux:badge variant="{{ $player->pivot->final_position === 1 ? 'success' : 'subtle' }}">
@@ -281,7 +315,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                            <td colspan="{{ $match->variant === 'X01' ? 9 : 5 }}" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                                 {{ __('Keine Spieler vorhanden.') }}
                             </td>
                         </tr>
