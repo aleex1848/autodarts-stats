@@ -14,10 +14,27 @@
             <flux:navlist variant="outline">
                 <flux:navlist.group :heading="__('Platform')" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
+                    <flux:navlist.item
+                        icon="trophy"
+                        :href="route('matches.index')"
+                        :current="request()->routeIs('matches.*')"
+                        wire:navigate
+                    >
+                        {{ __('Matches') }}
+                    </flux:navlist.item>
                 </flux:navlist.group>
 
                 @hasanyrole('Super-Admin|Admin')
                     <flux:navlist.group :heading="__('Admin')" class="grid">
+                        <flux:navlist.item
+                            icon="trophy"
+                            :href="route('admin.matches.index')"
+                            :current="request()->routeIs('admin.matches.*')"
+                            wire:navigate
+                        >
+                            {{ __('Matches') }}
+                        </flux:navlist.item>
+
                         <flux:navlist.item
                             icon="users"
                             :href="route('admin.users.index')"

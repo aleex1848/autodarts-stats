@@ -3,12 +3,21 @@
 namespace App\Providers;
 
 use App\Enums\RoleName;
+use App\Models\DartMatch;
 use App\Models\User;
+use App\Policies\DartMatchPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
 {
+    /**
+     * @var array<class-string, class-string>
+     */
+    protected $policies = [
+        DartMatch::class => DartMatchPolicy::class,
+    ];
+
     /**
      * Register services.
      */
