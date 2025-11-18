@@ -7,6 +7,9 @@ use App\Models\DartThrow;
 use App\Models\Leg;
 use App\Models\Player;
 use App\Models\Turn;
+use Illuminate\Database\DeadlockException;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
@@ -35,10 +38,11 @@ class WebhookProcessing extends ProcessWebhookJob
 
         DB::transaction(function () use ($payload, $data) {
             // Get or create player with deadlock retry
-            $player = $this->firstOrCreateWithRetry(
-                Player::class,
-                ['autodarts_user_id' => $data['playerId']],
-                ['name' => $data['playerName']]
+            // Also try to find by name to avoid duplicates if userId changed
+            $player = $this->findOrCreatePlayer(
+                $data['playerId'],
+                $data['playerName'],
+                []
             );
 
             // Get or create match with deadlock retry
@@ -134,11 +138,12 @@ class WebhookProcessing extends ProcessWebhookJob
                 // For bots/guests without userId, generate a deterministic fake UUID based on name
                 $userId = $playerData['userId'] ?? $this->generateBotUuid($playerData['name']);
 
-                $player = $this->firstOrCreateWithRetry(
-                    Player::class,
-                    ['autodarts_user_id' => $userId],
+                // Try to find or create player by autodarts_user_id
+                // If not found, also try to find by name to avoid duplicates
+                $player = $this->findOrCreatePlayer(
+                    $userId,
+                    $playerData['name'],
                     [
-                        'name' => $playerData['name'],
                         'email' => $playerData['user']['userSettings']['email'] ?? null,
                         'country' => $playerData['user']['country'] ?? null,
                         'avatar_url' => $playerData['avatarUrl'] ?? null,
@@ -276,35 +281,201 @@ class WebhookProcessing extends ProcessWebhookJob
         }
     }
 
+    protected function findOrCreatePlayer(string $userId, string $name, array $additionalValues = []): Player
+    {
+        // First, try to find by autodarts_user_id
+        $player = Player::where('autodarts_user_id', $userId)->first();
+        if ($player) {
+            // Update name and other values if they changed
+            $updateData = array_merge(['name' => $name], $additionalValues);
+            $player->update($updateData);
+
+            return $player;
+        }
+
+        // If not found by userId, check if a player with the same name exists
+        // This handles cases where Autodarts sends different userIds for the same user
+        $playerByName = Player::where('name', $name)->first();
+        if ($playerByName) {
+            // Found a player with the same name - update the autodarts_user_id if it's different
+            // This helps consolidate duplicate players
+            Log::info('Player found by name but different autodarts_user_id', [
+                'name' => $name,
+                'existing_user_id' => $playerByName->autodarts_user_id,
+                'new_user_id' => $userId,
+            ]);
+
+            // Only update if the new userId is more "valid" (not a bot UUID)
+            // Bot UUIDs start with 00000000, real user IDs don't
+            if (str_starts_with($userId, '00000000-0000-0000')) {
+                // New userId is a bot UUID, keep the existing one
+                $playerByName->update($additionalValues);
+
+                return $playerByName;
+            }
+
+            // Try to update autodarts_user_id, but catch unique constraint violations
+            try {
+                $playerByName->update(array_merge([
+                    'autodarts_user_id' => $userId,
+                    'name' => $name,
+                ], $additionalValues));
+
+                return $playerByName->fresh();
+            } catch (UniqueConstraintViolationException|QueryException $e) {
+                // Another player already has this userId, just update values
+                $playerByName->update(array_merge(['name' => $name], $additionalValues));
+
+                return $playerByName;
+            }
+        }
+
+        // No player found, create a new one
+        return $this->firstOrCreateWithRetry(
+            Player::class,
+            ['autodarts_user_id' => $userId],
+            array_merge(['name' => $name], $additionalValues)
+        );
+    }
+
     protected function firstOrCreateWithRetry(string $modelClass, array $attributes, array $values = [], int $maxAttempts = 3): mixed
     {
         $attempts = 0;
 
         while ($attempts < $maxAttempts) {
+            // First, try to find existing record
+            $existing = $modelClass::where($attributes)->first();
+            if ($existing) {
+                // Record exists, update it with new values if provided
+                if (! empty($values)) {
+                    try {
+                        $existing->update($values);
+                        $existing->refresh();
+                    } catch (\Exception $e) {
+                        // Ignore update errors - record exists, that's what matters
+                    }
+                }
+
+                return $existing;
+            }
+
+            // Record doesn't exist, try to create it
             try {
-                return $modelClass::firstOrCreate($attributes, $values);
-            } catch (\Illuminate\Database\QueryException $e) {
+                return $modelClass::create(array_merge($attributes, $values));
+            } catch (DeadlockException|UniqueConstraintViolationException|QueryException|\PDOException $e) {
                 $attempts++;
 
-                // Check if it's a deadlock or duplicate key error
-                if ($e->getCode() === 'HY000' || str_contains($e->getMessage(), '1020') || str_contains($e->getMessage(), 'Duplicate entry')) {
-                    // If last attempt, just try to find the record
-                    if ($attempts >= $maxAttempts) {
-                        return $modelClass::where($attributes)->first() ?? throw $e;
+                // Check if it's a deadlock, record changed (1020), or duplicate key error
+                $errorMessage = $e->getMessage();
+                $errorCode = $e->getCode();
+
+                $isDuplicateError = $e instanceof UniqueConstraintViolationException
+                    || $errorCode === 23000
+                    || $errorCode === '23000'
+                    || str_contains($errorMessage, 'Duplicate entry')
+                    || str_contains($errorMessage, '1062')
+                    || str_contains($errorMessage, 'Integrity constraint violation');
+
+                $isDeadlockError = $e instanceof DeadlockException
+                    || $errorCode === 'HY000'
+                    || $errorCode === 0
+                    || str_contains($errorMessage, '1020')
+                    || str_contains($errorMessage, 'Record has changed since last read')
+                    || str_contains($errorMessage, 'Deadlock');
+
+                $isRetryableError = $isDuplicateError || $isDeadlockError;
+
+                if ($isRetryableError) {
+                    // Record was created by another process, try to find it again
+                    // Wait a tiny bit first for the commit to complete
+                    usleep(10000 + ($attempts * 5000)); // 10ms, 15ms, 20ms
+                    $existing = $modelClass::where($attributes)->first();
+                    if ($existing) {
+                        // Record exists now, update it with new values if provided
+                        if (! empty($values)) {
+                            try {
+                                $existing->update($values);
+                                $existing->refresh();
+                            } catch (\Exception $updateException) {
+                                // Ignore update errors - record exists, that's what matters
+                            }
+                        }
+
+                        return $existing;
                     }
 
-                    // Wait a bit before retrying (exponential backoff)
-                    usleep(50000 * $attempts); // 50ms, 100ms, 150ms
+                    // If last attempt and still not found, wait a bit longer and try once more
+                    if ($attempts >= $maxAttempts) {
+                        usleep(50000); // 50ms
+                        $finalCheck = $modelClass::where($attributes)->first();
+                        if ($finalCheck) {
+                            if (! empty($values)) {
+                                try {
+                                    $finalCheck->update($values);
+                                    $finalCheck->refresh();
+                                } catch (\Exception $updateException) {
+                                    // Ignore update errors
+                                }
+                            }
+
+                            return $finalCheck;
+                        }
+
+                        // Still not found after all retries - this shouldn't happen for duplicate errors
+                        // For deadlock errors, it might be legitimately missing
+                        if ($isDuplicateError) {
+                            // For duplicate errors, we MUST find the record
+                            // Log a warning and try one more time
+                            Log::warning('Duplicate entry error but record not found', [
+                                'model' => $modelClass,
+                                'attributes' => $attributes,
+                                'attempts' => $attempts,
+                            ]);
+                            usleep(100000); // 100ms
+                            $finalCheck = $modelClass::where($attributes)->first();
+                            if ($finalCheck) {
+                                return $finalCheck;
+                            }
+                        }
+
+                        // Only rethrow if it's not a duplicate error (for duplicate, record MUST exist)
+                        if (! $isDuplicateError) {
+                            throw $e;
+                        }
+
+                        // For duplicate errors, return a new instance with the attributes
+                        // This is a fallback - should rarely happen
+                        return $modelClass::where($attributes)->firstOrFail();
+                    }
+
+                    // Wait a bit before retrying (exponential backoff with jitter)
+                    $delay = (50000 * $attempts) + random_int(0, 10000); // 50ms, 100ms + jitter
+                    usleep($delay);
 
                     continue;
                 }
 
-                // If it's not a deadlock, rethrow
+                // If it's not a retryable error, rethrow
                 throw $e;
             }
         }
 
-        // Final fallback: just get it
+        // Final fallback: try to find the record (it might exist now)
+        $existing = $modelClass::where($attributes)->first();
+        if ($existing) {
+            if (! empty($values)) {
+                try {
+                    $existing->update($values);
+                    $existing->refresh();
+                } catch (\Exception $e) {
+                    // Ignore update errors
+                }
+            }
+
+            return $existing;
+        }
+
+        // If still not found, try to get it (will throw ModelNotFoundException if not found)
         return $modelClass::where($attributes)->firstOrFail();
     }
 

@@ -31,3 +31,11 @@ Route::middleware(['auth'])->group(function () {
         )
         ->name('two-factor.show');
 });
+
+Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
+    ->prefix('admin')
+    ->as('admin.')
+    ->group(function () {
+        Volt::route('admin/users', 'admin.users.index')->name('users.index');
+        Volt::route('admin/roles', 'admin.roles.index')->name('roles.index');
+    });

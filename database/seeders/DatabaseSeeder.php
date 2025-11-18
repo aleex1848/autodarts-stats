@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\RoleName;
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -13,11 +13,18 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(RolePermissionSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $player = User::firstOrCreate(
+            ['email' => 'player@example.com'],
+            [
+                'name' => 'Player User',
+                'password' => 'password',
+            ],
+        );
+
+        if (! $player->hasRole(RoleName::Spieler->value)) {
+            $player->assignRole(RoleName::Spieler->value);
+        }
     }
 }

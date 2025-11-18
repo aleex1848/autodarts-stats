@@ -15,6 +15,28 @@
                 <flux:navlist.group :heading="__('Platform')" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
                 </flux:navlist.group>
+
+                @hasanyrole('Super-Admin|Admin')
+                    <flux:navlist.group :heading="__('Admin')" class="grid">
+                        <flux:navlist.item
+                            icon="users"
+                            :href="route('admin.users.index')"
+                            :current="request()->routeIs('admin.users.*')"
+                            wire:navigate
+                        >
+                            {{ __('Benutzer') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="key"
+                            :href="route('admin.roles.index')"
+                            :current="request()->routeIs('admin.roles.*')"
+                            wire:navigate
+                        >
+                            {{ __('Rollen') }}
+                        </flux:navlist.item>
+                    </flux:navlist.group>
+                @endhasanyrole
             </flux:navlist>
 
             <flux:spacer />
