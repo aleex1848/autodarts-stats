@@ -49,7 +49,10 @@ class DartMatch extends Model
                 'final_position',
                 'match_average',
                 'checkout_rate',
+                'checkout_attempts',
+                'checkout_hits',
                 'total_180s',
+                'darts_thrown',
             ])
             ->withTimestamps();
     }

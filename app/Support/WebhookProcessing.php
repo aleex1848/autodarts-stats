@@ -81,21 +81,14 @@ class WebhookProcessing extends ProcessWebhookJob
                 ]
             );
 
-            // Create throw
+            // Create throw with retry logic to handle race conditions
             $throwData = $data['throw'];
-            DartThrow::create([
-                'turn_id' => $turn->id,
-                'autodarts_throw_id' => $throwData['id'],
-                'webhook_call_id' => $this->webhookCall->id,
-                'dart_number' => $throwData['throw'],
-                'segment_number' => $throwData['segment']['number'] ?? null,
-                'multiplier' => $throwData['segment']['multiplier'] ?? 1,
-                'points' => ($throwData['segment']['number'] ?? 0) * ($throwData['segment']['multiplier'] ?? 1),
-                'segment_name' => $throwData['segment']['name'] ?? null,
-                'segment_bed' => $throwData['segment']['bed'] ?? null,
-                'coords_x' => $throwData['coords']['x'] ?? null,
-                'coords_y' => $throwData['coords']['y'] ?? null,
-            ]);
+            $this->createThrowWithRetry(
+                $turn,
+                $throwData['id'],
+                $throwData,
+                $throwData['throw']
+            );
         });
 
         Log::debug('throw processed', [
@@ -150,33 +143,85 @@ class WebhookProcessing extends ProcessWebhookJob
                     ]
                 );
 
+                // Get statistics from webhook if available
+                $matchStats = $matchData['stats'][$index]['matchStats'] ?? null;
+                $matchAverage = null;
+                $checkoutRate = null;
+                $checkoutAttempts = null;
+                $checkoutHits = null;
+                $total180s = null;
+                $dartsThrown = null;
+
+                if ($matchStats) {
+                    // Average is already calculated by Autodarts
+                    $matchAverage = isset($matchStats['average']) ? round((float) $matchStats['average'], 2) : null;
+
+                    // Checkout rate is already calculated by Autodarts (as decimal between 0 and 1)
+                    $checkoutRate = isset($matchStats['checkoutPercent']) ? round((float) $matchStats['checkoutPercent'], 4) : null;
+
+                    // Checkout attempts and hits
+                    $checkoutAttempts = isset($matchStats['checkouts']) ? (int) $matchStats['checkouts'] : null;
+                    $checkoutHits = isset($matchStats['checkoutsHit']) ? (int) $matchStats['checkoutsHit'] : null;
+
+                    // Total 180s
+                    $total180s = isset($matchStats['total180']) ? (int) $matchStats['total180'] : null;
+
+                    // Total darts thrown
+                    $dartsThrown = isset($matchStats['dartsThrown']) ? (int) $matchStats['dartsThrown'] : null;
+                }
+
                 // Sync pivot table
                 $match->players()->syncWithoutDetaching([
                     $player->id => [
                         'player_index' => $index,
                         'legs_won' => $matchData['scores'][$index]['legs'] ?? 0,
                         'sets_won' => $matchData['scores'][$index]['sets'] ?? 0,
+                        'match_average' => $matchAverage,
+                        'checkout_rate' => $checkoutRate,
+                        'checkout_attempts' => $checkoutAttempts,
+                        'checkout_hits' => $checkoutHits,
+                        'total_180s' => $total180s ?? 0,
+                        'darts_thrown' => $dartsThrown,
                     ],
                 ]);
             }
 
             // Update match status (after players are synced)
             if ($matchData['finished'] ?? false) {
-                $winnerIndex = $matchData['winner'] ?? null;
-                if ($winnerIndex !== null && isset($matchData['players'][$winnerIndex])) {
-                    $winnerPlayerId = $matchData['players'][$winnerIndex]['userId'];
-                    $winner = Player::where('autodarts_user_id', $winnerPlayerId)->first();
+                $updateData = [
+                    'finished_at' => now(),
+                ];
 
-                    $match->update([
-                        'finished_at' => now(),
-                        'winner_player_id' => $winner?->id,
-                    ]);
+                // Try to find winner if winner index is provided
+                $winnerIndex = $matchData['winner'] ?? $matchData['gameWinner'] ?? null;
+                if ($winnerIndex !== null && isset($matchData['players'][$winnerIndex])) {
+                    $winnerPlayerId = $matchData['players'][$winnerIndex]['userId'] ?? null;
+                    if ($winnerPlayerId) {
+                        $winner = Player::where('autodarts_user_id', $winnerPlayerId)->first();
+                        if ($winner) {
+                            $updateData['winner_player_id'] = $winner->id;
+                        }
+                    }
                 }
+
+                $match->update($updateData);
+
+                // Calculate and update final positions for all players
+                $this->updateFinalPositions($match, $matchData);
             }
 
             // Process turns from match state (for correction detection)
             if (isset($matchData['turns']) && is_array($matchData['turns'])) {
                 $this->processTurnsFromMatchState($match, $matchData['turns']);
+            }
+
+            // Update leg winners and statistics
+            $this->updateLegs($match, $matchData);
+
+            // Only calculate statistics if not available in webhook (for backwards compatibility)
+            // Statistics are now extracted directly from match_state webhook above
+            if (! isset($matchData['stats'])) {
+                $this->updatePlayerStatistics($match);
             }
         });
 
@@ -257,28 +302,86 @@ class WebhookProcessing extends ProcessWebhookJob
                 ]);
             }
 
-            // Create new throw
-            $newThrow = DartThrow::create([
-                'turn_id' => $turn->id,
-                'autodarts_throw_id' => $throwId,
-                'webhook_call_id' => $this->webhookCall->id,
-                'dart_number' => $dartNumber,
-                'segment_number' => $throwData['segment']['number'] ?? null,
-                'multiplier' => $throwData['segment']['multiplier'] ?? 1,
-                'points' => ($throwData['segment']['number'] ?? 0) * ($throwData['segment']['multiplier'] ?? 1),
-                'segment_name' => $throwData['segment']['name'] ?? null,
-                'segment_bed' => $throwData['segment']['bed'] ?? null,
-                'coords_x' => $throwData['coords']['x'] ?? null,
-                'coords_y' => $throwData['coords']['y'] ?? null,
-            ]);
+            // Create new throw with retry logic to handle race conditions
+            $newThrow = $this->createThrowWithRetry($turn, $throwId, $throwData, $dartNumber);
 
             // Link correction
-            if ($existingThrowAtPosition) {
+            if ($existingThrowAtPosition && $newThrow) {
                 $existingThrowAtPosition->update([
                     'corrected_by_throw_id' => $newThrow->id,
                 ]);
             }
         }
+    }
+
+    protected function createThrowWithRetry(Turn $turn, string $throwId, array $throwData, int $dartNumber, int $maxAttempts = 3): ?DartThrow
+    {
+        $attempts = 0;
+
+        while ($attempts < $maxAttempts) {
+            // First, check if throw already exists (might have been created by another process)
+            $existing = DartThrow::where('autodarts_throw_id', $throwId)->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            // Try to create the throw
+            try {
+                return DartThrow::create([
+                    'turn_id' => $turn->id,
+                    'autodarts_throw_id' => $throwId,
+                    'webhook_call_id' => $this->webhookCall->id,
+                    'dart_number' => $dartNumber,
+                    'segment_number' => $throwData['segment']['number'] ?? null,
+                    'multiplier' => $throwData['segment']['multiplier'] ?? 1,
+                    'points' => ($throwData['segment']['number'] ?? 0) * ($throwData['segment']['multiplier'] ?? 1),
+                    'segment_name' => $throwData['segment']['name'] ?? null,
+                    'segment_bed' => $throwData['segment']['bed'] ?? null,
+                    'coords_x' => $throwData['coords']['x'] ?? null,
+                    'coords_y' => $throwData['coords']['y'] ?? null,
+                ]);
+            } catch (DeadlockException|QueryException|\PDOException $e) {
+                $attempts++;
+
+                $errorMessage = $e->getMessage();
+                $errorCode = $e->getCode();
+
+                $isDeadlockError = $e instanceof DeadlockException
+                    || $errorCode === 'HY000'
+                    || $errorCode === 0
+                    || str_contains($errorMessage, '1020')
+                    || str_contains($errorMessage, 'Record has changed since last read')
+                    || str_contains($errorMessage, 'Deadlock');
+
+                if ($isDeadlockError) {
+                    // Wait a bit for the other transaction to complete
+                    usleep(10000 + ($attempts * 5000)); // 10ms, 15ms, 20ms
+
+                    // Check again if throw exists now
+                    $existing = DartThrow::where('autodarts_throw_id', $throwId)->first();
+                    if ($existing) {
+                        return $existing;
+                    }
+
+                    // If last attempt, wait a bit longer
+                    if ($attempts >= $maxAttempts) {
+                        usleep(50000); // 50ms
+                        $finalCheck = DartThrow::where('autodarts_throw_id', $throwId)->first();
+                        if ($finalCheck) {
+                            return $finalCheck;
+                        }
+                    }
+
+                    continue;
+                }
+
+                // If it's not a retryable error, rethrow
+                throw $e;
+            }
+        }
+
+        // Final fallback: try to find the throw (it might exist now)
+        return DartThrow::where('autodarts_throw_id', $throwId)->first();
     }
 
     protected function findOrCreatePlayer(string $userId, string $name, array $additionalValues = []): Player
@@ -500,6 +603,249 @@ class WebhookProcessing extends ProcessWebhookJob
         );
     }
 
+    protected function updateLegs(DartMatch $match, array $matchData): void
+    {
+        // Get all legs for this match
+        $legs = $match->legs;
+
+        // Get current leg and set from webhook
+        $currentLegNumber = $matchData['leg'] ?? null;
+        $currentSetNumber = $matchData['set'] ?? 1;
+
+        // Get legs_won statistics if available (to help determine winners for legs without score_after = 0)
+        $legsWonByPlayer = [];
+        if (isset($matchData['scores'])) {
+            foreach ($matchData['scores'] as $index => $score) {
+                $player = $match->players->firstWhere('pivot.player_index', $index);
+                if ($player) {
+                    $legsWonByPlayer[$player->id] = $score['legs'] ?? 0;
+                }
+            }
+        }
+
+        foreach ($legs as $leg) {
+            // Find winner by looking for turns with score_after = 0 (successful checkout)
+            // First try with finished_at, then without (as fallback)
+            $winningTurn = Turn::query()
+                ->where('leg_id', $leg->id)
+                ->where('score_after', 0)
+                ->whereNotNull('finished_at')
+                ->orderBy('finished_at', 'desc')
+                ->first();
+
+            // If no turn with finished_at, try without (some turns might not have finished_at set)
+            if (! $winningTurn) {
+                $winningTurn = Turn::query()
+                    ->where('leg_id', $leg->id)
+                    ->where('score_after', 0)
+                    ->orderBy('id', 'desc')
+                    ->first();
+            }
+
+            // If still no winner, try to find the turn with the lowest score_after (closest to 0)
+            // This handles cases where the winning turn might have been corrected or not saved properly
+            if (! $winningTurn) {
+                $lowestScoreTurn = Turn::query()
+                    ->where('leg_id', $leg->id)
+                    ->whereNotNull('score_after')
+                    ->orderBy('score_after', 'asc')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                // If the lowest score is 0 or very low (e.g., checkout situation), use it
+                if ($lowestScoreTurn && $lowestScoreTurn->score_after === 0) {
+                    $winningTurn = $lowestScoreTurn;
+                }
+            }
+
+            // Verify winner against legs_won statistics if match is finished
+            // This prevents incorrectly assigning legs when turns have score_after = 0 but the player didn't actually win
+            if ($winningTurn && ($matchData['finished'] ?? false) && ! empty($legsWonByPlayer)) {
+                $expectedWins = $legsWonByPlayer[$winningTurn->player_id] ?? 0;
+                $currentWins = $legs->where('winner_player_id', $winningTurn->player_id)->count();
+
+                // If this player already has enough wins, this leg might belong to another player
+                if ($currentWins >= $expectedWins) {
+                    // Find the player who still needs wins
+                    foreach ($match->players as $player) {
+                        $playerExpectedWins = $legsWonByPlayer[$player->id] ?? 0;
+                        $playerCurrentWins = $legs->where('winner_player_id', $player->id)->count();
+
+                        if ($playerCurrentWins < $playerExpectedWins) {
+                            // This player needs more wins - check if they have a turn in this leg
+                            $playerTurn = Turn::query()
+                                ->where('leg_id', $leg->id)
+                                ->where('player_id', $player->id)
+                                ->orderBy('id', 'desc')
+                                ->first();
+
+                            if ($playerTurn) {
+                                $winningTurn = $playerTurn;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If still no winner found and match is finished, try to determine winner from last turn
+            // The player who has the last turn in a finished leg likely won it
+            if (! $winningTurn && ($matchData['finished'] ?? false)) {
+                $lastTurn = Turn::query()
+                    ->where('leg_id', $leg->id)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($lastTurn) {
+                    // Check if this player has won more legs than others, suggesting they won this one
+                    $playerWins = $legsWonByPlayer[$lastTurn->player_id] ?? 0;
+                    $otherPlayers = $match->players->where('id', '!=', $lastTurn->player_id);
+                    $hasMoreWins = true;
+
+                    foreach ($otherPlayers as $otherPlayer) {
+                        $otherWins = $legsWonByPlayer[$otherPlayer->id] ?? 0;
+                        if ($otherWins >= $playerWins) {
+                            $hasMoreWins = false;
+                            break;
+                        }
+                    }
+
+                    // If this player has significantly more wins and this leg has no other winner,
+                    // it's likely they won this leg too
+                    if ($hasMoreWins && $playerWins > 0) {
+                        $winningTurn = $lastTurn;
+                    }
+                }
+            }
+
+            $updateData = [];
+
+            if ($winningTurn) {
+                // Leg has a winner
+                $updateData['winner_player_id'] = $winningTurn->player_id;
+                // Use finished_at if available, otherwise use started_at or now
+                $updateData['finished_at'] = $winningTurn->finished_at ?? $winningTurn->started_at ?? now();
+            }
+
+            // Set started_at from first turn if not set
+            if (! $leg->started_at) {
+                $firstTurn = Turn::query()
+                    ->where('leg_id', $leg->id)
+                    ->whereNotNull('started_at')
+                    ->orderBy('started_at', 'asc')
+                    ->first();
+
+                if ($firstTurn) {
+                    $updateData['started_at'] = $firstTurn->started_at;
+                }
+            }
+
+            // Update leg if we have changes
+            if (! empty($updateData)) {
+                $leg->update($updateData);
+            }
+
+            // Save leg statistics if this is the current leg and stats are available
+            if ($leg->leg_number === $currentLegNumber
+                && $leg->set_number === $currentSetNumber
+                && isset($matchData['stats'])
+            ) {
+                $this->saveLegStatistics($leg, $matchData['stats']);
+            } elseif ($leg->finished_at) {
+                // If leg is finished but no stats from webhook, calculate from turns
+                \App\Support\LegStatisticsCalculator::calculateAndUpdate($leg);
+            }
+        }
+    }
+
+    protected function saveLegStatistics(Leg $leg, array $stats): void
+    {
+        foreach ($stats as $index => $playerStats) {
+            $legStats = $playerStats['legStats'] ?? null;
+            if (! $legStats) {
+                continue;
+            }
+
+            // Get player by index from match
+            $match = $leg->match;
+            $players = $match->players;
+            $player = $players->firstWhere('pivot.player_index', $index);
+
+            if (! $player) {
+                continue;
+            }
+
+            $average = isset($legStats['average']) ? round((float) $legStats['average'], 2) : null;
+            $checkoutRate = isset($legStats['checkoutPercent']) ? round((float) $legStats['checkoutPercent'], 4) : null;
+            $dartsThrown = isset($legStats['dartsThrown']) ? (int) $legStats['dartsThrown'] : null;
+            $checkoutAttempts = isset($legStats['checkouts']) ? (int) $legStats['checkouts'] : null;
+            $checkoutHits = isset($legStats['checkoutsHit']) ? (int) $legStats['checkoutsHit'] : null;
+
+            // Update or create leg_player record
+            DB::table('leg_player')->updateOrInsert(
+                [
+                    'leg_id' => $leg->id,
+                    'player_id' => $player->id,
+                ],
+                [
+                    'average' => $average,
+                    'checkout_rate' => $checkoutRate,
+                    'darts_thrown' => $dartsThrown,
+                    'checkout_attempts' => $checkoutAttempts,
+                    'checkout_hits' => $checkoutHits,
+                    'updated_at' => now(),
+                    'created_at' => DB::raw('COALESCE(created_at, NOW())'),
+                ]
+            );
+        }
+    }
+
+    protected function updateFinalPositions(DartMatch $match, array $matchData): void
+    {
+        $winnerIndex = $matchData['winner'] ?? $matchData['gameWinner'] ?? null;
+        $players = $match->players;
+
+        if ($winnerIndex !== null) {
+            // Simple case: winner index is provided
+            // Winner gets position 1, others get position 2
+            foreach ($players as $player) {
+                $position = ($player->pivot->player_index === (int) $winnerIndex) ? 1 : 2;
+                $match->players()->updateExistingPivot($player->id, [
+                    'final_position' => $position,
+                ]);
+            }
+        } elseif (isset($matchData['scores']) && is_array($matchData['scores'])) {
+            // Calculate positions based on scores (Sets first, then Legs)
+            $playerScores = [];
+            foreach ($players as $player) {
+                $index = $player->pivot->player_index;
+                if (isset($matchData['scores'][$index])) {
+                    $playerScores[] = [
+                        'player_id' => $player->id,
+                        'sets' => $matchData['scores'][$index]['sets'] ?? 0,
+                        'legs' => $matchData['scores'][$index]['legs'] ?? 0,
+                    ];
+                }
+            }
+
+            // Sort by sets (descending), then by legs (descending)
+            usort($playerScores, function ($a, $b) {
+                if ($a['sets'] !== $b['sets']) {
+                    return $b['sets'] <=> $a['sets'];
+                }
+
+                return $b['legs'] <=> $a['legs'];
+            });
+
+            // Update positions based on sorted order
+            foreach ($playerScores as $position => $playerScore) {
+                $match->players()->updateExistingPivot($playerScore['player_id'], [
+                    'final_position' => $position + 1,
+                ]);
+            }
+        }
+    }
+
     protected function parseTimestamp(?string $timestamp): ?string
     {
         // If no timestamp provided, return null
@@ -515,5 +861,10 @@ class WebhookProcessing extends ProcessWebhookJob
 
         // Return the timestamp as-is for Laravel to cast
         return $timestamp;
+    }
+
+    protected function updatePlayerStatistics(DartMatch $match): void
+    {
+        \App\Support\MatchStatisticsCalculator::calculateAndUpdate($match);
     }
 }

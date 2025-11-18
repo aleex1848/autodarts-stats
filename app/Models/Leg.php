@@ -43,4 +43,17 @@ class Leg extends Model
     {
         return $this->hasMany(Turn::class);
     }
+
+    public function legPlayers(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Player::class, 'leg_player', 'leg_id', 'player_id')
+            ->withPivot([
+                'average',
+                'checkout_rate',
+                'darts_thrown',
+                'checkout_attempts',
+                'checkout_hits',
+            ])
+            ->withTimestamps();
+    }
 }

@@ -8,17 +8,28 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Volt\Component;
 
-new class extends Component {
+new class extends Component
+{
     use AuthorizesRequests;
 
     public DartMatch $match;
+
     public Collection $legs;
+
     public ?int $playerId = null;
+
     public int $targetNumber = 20;
+
     public array $segmentOptions = [];
+
     public array $targetSegments = [];
+
     public array $segmentCounts = [];
+
+    public array $tripleCounts = [];
+
     public int $totalTargetThrows = 0;
+
     public int $maxSegmentCount = 0;
 
     protected array $boardOrder = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
@@ -33,7 +44,7 @@ new class extends Component {
         ]);
 
         $this->legs = $match->legs()
-            ->with('winner')
+            ->with(['winner', 'legPlayers'])
             ->orderBy('set_number')
             ->orderBy('leg_number')
             ->get();
@@ -59,6 +70,7 @@ new class extends Component {
             'legs' => $this->legs,
             'targetSegments' => $this->targetSegments,
             'segmentCounts' => $this->segmentCounts,
+            'tripleCounts' => $this->tripleCounts,
             'targetNumber' => $this->targetNumber,
             'segmentOptions' => $this->segmentOptions,
             'maxSegmentCount' => $this->maxSegmentCount,
@@ -70,6 +82,7 @@ new class extends Component {
     {
         $this->targetSegments = $this->resolveTargetSegments();
         $this->segmentCounts = collect($this->targetSegments)->mapWithKeys(fn ($segment) => [$segment => 0])->toArray();
+        $this->tripleCounts = collect($this->targetSegments)->mapWithKeys(fn ($segment) => [$segment => 0])->toArray();
         $this->totalTargetThrows = 0;
         $this->maxSegmentCount = 0;
 
@@ -77,22 +90,71 @@ new class extends Component {
             return;
         }
 
+        $baseScore = $this->match->base_score ?? 501;
+        $targetNumber = $this->targetNumber;
+
+        // Count all throws on target segments, but only if the score before the throw was >= targetNumber
+        // score_after is the score AFTER the turn, so if score_after >= targetNumber,
+        // the score before the turn (score_after + points) was also >= targetNumber
         $counts = DartThrow::query()
-            ->selectRaw('segment_number, COUNT(*) as total')
-            ->whereIn('segment_number', $this->targetSegments)
-            ->whereNotNull('segment_number')
-            ->notCorrected()
-            ->whereHas('turn', function (QueryBuilder $turnQuery): void {
-                $turnQuery->where('player_id', $this->playerId)
-                    ->whereHas('leg', fn (QueryBuilder $legQuery) => $legQuery->where('match_id', $this->match->id));
+            ->selectRaw('throws.segment_number, COUNT(*) as total')
+            ->join('turns', 'throws.turn_id', '=', 'turns.id')
+            ->join('legs', 'turns.leg_id', '=', 'legs.id')
+            ->whereIn('throws.segment_number', $this->targetSegments)
+            ->whereNotNull('throws.segment_number')
+            ->where('throws.is_corrected', false)
+            ->where('turns.player_id', $this->playerId)
+            ->where('legs.match_id', $this->match->id)
+            ->where(function (QueryBuilder $scoreQuery) use ($targetNumber, $baseScore): void {
+                // Include throws where score_after >= targetNumber (score was high enough before the turn)
+                // OR score_after is null (ongoing turn) and base_score >= targetNumber
+                $scoreQuery->where(function (QueryBuilder $subQuery) use ($targetNumber): void {
+                    $subQuery->whereNotNull('turns.score_after')
+                        ->whereRaw('turns.score_after >= ?', [$targetNumber]);
+                })
+                    ->orWhere(function (QueryBuilder $subQuery) use ($baseScore, $targetNumber): void {
+                        $subQuery->whereNull('turns.score_after')
+                            ->whereRaw('? >= ?', [$baseScore, $targetNumber]);
+                    });
             })
-            ->groupBy('segment_number')
+            ->groupBy('throws.segment_number')
             ->pluck('total', 'segment_number')
             ->toArray();
 
         foreach ($counts as $segment => $total) {
             if (array_key_exists($segment, $this->segmentCounts)) {
                 $this->segmentCounts[$segment] = (int) $total;
+            }
+        }
+
+        // Count triple hits on all target segments
+        $tripleCounts = DartThrow::query()
+            ->selectRaw('throws.segment_number, COUNT(*) as total')
+            ->join('turns', 'throws.turn_id', '=', 'turns.id')
+            ->join('legs', 'turns.leg_id', '=', 'legs.id')
+            ->whereIn('throws.segment_number', $this->targetSegments)
+            ->where('throws.multiplier', 3)
+            ->whereNotNull('throws.segment_number')
+            ->where('throws.is_corrected', false)
+            ->where('turns.player_id', $this->playerId)
+            ->where('legs.match_id', $this->match->id)
+            ->where(function (QueryBuilder $scoreQuery) use ($targetNumber, $baseScore): void {
+                $scoreQuery->where(function (QueryBuilder $subQuery) use ($targetNumber): void {
+                    $subQuery->whereNotNull('turns.score_after')
+                        ->whereRaw('turns.score_after >= ?', [$targetNumber]);
+                })
+                    ->orWhere(function (QueryBuilder $subQuery) use ($baseScore, $targetNumber): void {
+                        $subQuery->whereNull('turns.score_after')
+                            ->whereRaw('? >= ?', [$baseScore, $targetNumber]);
+                    });
+            })
+            ->groupBy('throws.segment_number')
+            ->pluck('total', 'segment_number')
+            ->toArray();
+
+        foreach ($tripleCounts as $segment => $total) {
+            if (array_key_exists($segment, $this->tripleCounts)) {
+                $this->tripleCounts[$segment] = (int) $total;
             }
         }
 
@@ -163,6 +225,9 @@ new class extends Component {
                                 <tr>
                                     <th class="px-4 py-3 text-left">{{ __('Feld') }}</th>
                                     <th class="px-4 py-3 text-right">{{ __('Anzahl') }}</th>
+                                    @if (collect($tripleCounts)->sum() > 0)
+                                        <th class="px-4 py-3 text-right">{{ __('Triple') }}</th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -176,6 +241,11 @@ new class extends Component {
                                         <td class="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
                                             {{ $segmentCounts[$segment] ?? 0 }}
                                         </td>
+                                        @if (collect($tripleCounts)->sum() > 0)
+                                            <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                {{ $tripleCounts[$segment] ?? 0 }}
+                                            </td>
+                                        @endif
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -187,6 +257,11 @@ new class extends Component {
                                     <td class="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
                                         {{ $totalTargetThrows }}
                                     </td>
+                                    @if (collect($tripleCounts)->sum() > 0)
+                                        <td class="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
+                                            {{ collect($tripleCounts)->sum() }}
+                                        </td>
+                                    @endif
                                 </tr>
                             </tfoot>
                         </table>

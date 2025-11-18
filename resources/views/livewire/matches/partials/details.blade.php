@@ -106,23 +106,77 @@
             <flux:heading size="md">{{ __('Spielverlauf') }}</flux:heading>
 
             @if ($legs->isNotEmpty())
-                <div class="mt-4 space-y-3">
+                <div class="mt-4 space-y-4">
                     @foreach ($legs as $leg)
-                        <div class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
-                            <div class="flex items-center justify-between">
+                        <div class="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                            <div class="mb-3 flex items-center justify-between">
                                 <span class="font-medium text-zinc-900 dark:text-zinc-100">
                                     {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
                                 </span>
-                                <flux:badge variant="subtle" size="sm">
+                                <flux:badge variant="{{ $leg->winner ? 'success' : 'subtle' }}" size="sm">
                                     {{ $leg->winner?->name ?? __('Offen') }}
                                 </flux:badge>
                             </div>
-                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ $leg->started_at?->format('d.m.Y H:i') ?? '—' }}
-                                @if ($leg->finished_at)
-                                    · {{ __('Ende:') }} {{ $leg->finished_at->format('d.m.Y H:i') }}
-                                @endif
-                            </p>
+
+                            @if ($leg->started_at || $leg->finished_at)
+                                <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                                    @if ($leg->started_at)
+                                        {{ __('Start:') }} {{ $leg->started_at->format('d.m.Y H:i:s') }}
+                                    @endif
+                                    @if ($leg->finished_at)
+                                        @if ($leg->started_at) · @endif
+                                        {{ __('Ende:') }} {{ $leg->finished_at->format('d.m.Y H:i:s') }}
+                                    @endif
+                                </p>
+                            @endif
+
+                            @if ($leg->legPlayers->isNotEmpty())
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-zinc-200 text-xs dark:divide-zinc-700">
+                                        <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left">{{ __('Spieler') }}</th>
+                                                <th class="px-3 py-2 text-right">{{ __('Average') }}</th>
+                                                <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
+                                                <th class="px-3 py-2 text-right">{{ __('Checkout %') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
+                                            @foreach ($leg->legPlayers as $player)
+                                                <tr>
+                                                    <td class="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
+                                                        {{ $player->name }}
+                                                    </td>
+                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->average))
+                                                            {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->darts_thrown))
+                                                            {{ $player->pivot->darts_thrown }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->checkout_rate))
+                                                            {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                                            @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                                                ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                                            @endif
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
                         </div>
                     @endforeach
                 </div>
@@ -150,6 +204,7 @@
                         <th class="px-4 py-3 text-left">{{ __('Legs') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Sets') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Average') }}</th>
+                        <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('180er') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Platzierung') }}</th>
@@ -181,8 +236,18 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3">
+                                @if (! is_null($player->pivot->darts_thrown))
+                                    {{ $player->pivot->darts_thrown }}
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="px-4 py-3">
                                 @if (! is_null($player->pivot->checkout_rate))
-                                    {{ number_format((float) $player->pivot->checkout_rate, 2, ',', '.') }}%
+                                    {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                    @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                        ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                    @endif
                                 @else
                                     —
                                 @endif
@@ -200,7 +265,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                            <td colspan="8" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                                 {{ __('Keine Spieler vorhanden.') }}
                             </td>
                         </tr>
