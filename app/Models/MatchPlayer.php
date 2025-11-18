@@ -26,6 +26,7 @@ class MatchPlayer extends Pivot
         'checkout_hits',
         'total_180s',
         'darts_thrown',
+        'busted_count',
     ];
 
     protected function casts(): array

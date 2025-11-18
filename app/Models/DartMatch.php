@@ -53,6 +53,7 @@ class DartMatch extends Model
                 'checkout_hits',
                 'total_180s',
                 'darts_thrown',
+                'busted_count',
             ])
             ->withTimestamps();
     }

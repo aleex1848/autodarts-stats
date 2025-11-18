@@ -212,7 +212,7 @@ class WebhookProcessing extends ProcessWebhookJob
 
             // Process turns from match state (for correction detection)
             if (isset($matchData['turns']) && is_array($matchData['turns'])) {
-                $this->processTurnsFromMatchState($match, $matchData['turns']);
+                $this->processTurnsFromMatchState($match, $matchData['turns'], $matchData);
             }
 
             // Update leg winners and statistics
@@ -231,7 +231,7 @@ class WebhookProcessing extends ProcessWebhookJob
         ]);
     }
 
-    protected function processTurnsFromMatchState(DartMatch $match, array $turns): void
+    protected function processTurnsFromMatchState(DartMatch $match, array $turns, array $matchData): void
     {
         foreach ($turns as $turnData) {
             $player = Player::where('autodarts_user_id', $turnData['playerId'])->first();
@@ -239,33 +239,78 @@ class WebhookProcessing extends ProcessWebhookJob
                 continue;
             }
 
-            $leg = Leg::where('match_id', $match->id)
-                ->where('leg_number', $match->leg ?? 1)
-                ->first();
+            // Check if turn already exists - if so, use its existing leg
+            $existingTurn = Turn::where('autodarts_turn_id', $turnData['id'])->first();
 
-            if (! $leg) {
-                continue;
+            if ($existingTurn) {
+                // Turn already exists - update busted flag and other fields, but keep existing leg
+                $leg = $existingTurn->leg;
+
+                // Parse timestamps, treating invalid dates as null
+                $startedAt = $this->parseTimestamp($turnData['createdAt'] ?? null);
+                $finishedAt = $this->parseTimestamp($turnData['finishedAt'] ?? null);
+
+                // Update fields that may have changed
+                $updateData = [
+                    'score_after' => $turnData['score'] ?? $existingTurn->score_after,
+                    'points' => $turnData['points'] ?? $existingTurn->points,
+                ];
+
+                if ($startedAt) {
+                    $updateData['started_at'] = $startedAt;
+                }
+
+                if ($finishedAt) {
+                    $updateData['finished_at'] = $finishedAt;
+                }
+
+                // Always update busted flag if provided (it may change after turn is created)
+                if (isset($turnData['busted'])) {
+                    $updateData['busted'] = (bool) $turnData['busted'];
+                }
+
+                $existingTurn->update($updateData);
+                $turn = $existingTurn;
+            } else {
+                // Turn doesn't exist - create it for the current leg
+                $currentLegNumber = $matchData['leg'] ?? 1;
+
+                $leg = Leg::where('match_id', $match->id)
+                    ->where('leg_number', $currentLegNumber)
+                    ->first();
+
+                if (! $leg) {
+                    continue;
+                }
+
+                // Parse timestamps, treating invalid dates as null
+                $startedAt = $this->parseTimestamp($turnData['createdAt'] ?? null);
+                $finishedAt = $this->parseTimestamp($turnData['finishedAt'] ?? null);
+
+                $turn = $this->firstOrCreateWithRetry(
+                    Turn::class,
+                    ['autodarts_turn_id' => $turnData['id']],
+                    [
+                        'leg_id' => $leg->id,
+                        'player_id' => $player->id,
+                        'round_number' => $turnData['round'],
+                        'turn_number' => $turnData['turn'] ?? 0,
+                        'points' => $turnData['points'] ?? 0,
+                        'score_after' => $turnData['score'] ?? null,
+                        'busted' => $turnData['busted'] ?? false,
+                        'started_at' => $startedAt ?? now(),
+                        'finished_at' => $finishedAt,
+                    ]
+                );
+
+                // Ensure busted flag is always updated from match_state (it may change after turn is created)
+                if (isset($turnData['busted'])) {
+                    $busted = (bool) $turnData['busted'];
+                    if ($turn->busted !== $busted) {
+                        $turn->update(['busted' => $busted]);
+                    }
+                }
             }
-
-            // Parse timestamps, treating invalid dates as null
-            $startedAt = $this->parseTimestamp($turnData['createdAt'] ?? null);
-            $finishedAt = $this->parseTimestamp($turnData['finishedAt'] ?? null);
-
-            $turn = $this->firstOrCreateWithRetry(
-                Turn::class,
-                ['autodarts_turn_id' => $turnData['id']],
-                [
-                    'leg_id' => $leg->id,
-                    'player_id' => $player->id,
-                    'round_number' => $turnData['round'],
-                    'turn_number' => $turnData['turn'] ?? 0,
-                    'points' => $turnData['points'] ?? 0,
-                    'score_after' => $turnData['score'] ?? null,
-                    'busted' => $turnData['busted'] ?? false,
-                    'started_at' => $startedAt ?? now(),
-                    'finished_at' => $finishedAt,
-                ]
-            );
 
             // Process throws within this turn
             if (isset($turnData['throws']) && is_array($turnData['throws'])) {

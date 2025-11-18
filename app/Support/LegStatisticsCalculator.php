@@ -53,6 +53,13 @@ class LegStatisticsCalculator
             // Count darts thrown
             $dartsThrown = (int) ($throwStats->throw_count ?? 0);
 
+            // Count busted turns (when player overthrows)
+            $bustedCount = Turn::query()
+                ->where('leg_id', $leg->id)
+                ->where('player_id', $player->id)
+                ->where('busted', true)
+                ->count();
+
             // Update or create leg_player record
             DB::table('leg_player')->updateOrInsert(
                 [
@@ -65,6 +72,7 @@ class LegStatisticsCalculator
                     'darts_thrown' => $dartsThrown > 0 ? $dartsThrown : null,
                     'checkout_attempts' => $checkoutAttempts,
                     'checkout_hits' => $checkoutHits,
+                    'busted_count' => $bustedCount > 0 ? $bustedCount : null,
                     'updated_at' => now(),
                     'created_at' => DB::raw('COALESCE(created_at, NOW())'),
                 ]

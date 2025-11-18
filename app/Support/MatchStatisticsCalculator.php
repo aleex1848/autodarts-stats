@@ -65,11 +65,20 @@ class MatchStatisticsCalculator
 
             $total180s = $turnsWithTriples->count();
 
+            // Count busted turns (when player overthrows)
+            $bustedCount = Turn::query()
+                ->join('legs', 'turns.leg_id', '=', 'legs.id')
+                ->where('legs.match_id', $match->id)
+                ->where('turns.player_id', $player->id)
+                ->where('turns.busted', true)
+                ->count();
+
             // Update match_player pivot table
             $match->players()->updateExistingPivot($player->id, [
                 'match_average' => $matchAverage,
                 'checkout_rate' => $checkoutRate,
                 'total_180s' => $total180s,
+                'busted_count' => $bustedCount,
             ]);
         }
     }

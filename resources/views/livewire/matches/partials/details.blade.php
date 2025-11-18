@@ -139,6 +139,7 @@
                                                 <th class="px-3 py-2 text-right">{{ __('Average') }}</th>
                                                 <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
                                                 <th class="px-3 py-2 text-right">{{ __('Checkout %') }}</th>
+                                                <th class="px-3 py-2 text-right">{{ __('BUST') }}</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
@@ -169,6 +170,13 @@
                                                             @endif
                                                         @else
                                                             —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                                            <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
+                                                        @else
+                                                            0
                                                         @endif
                                                     </td>
                                                 </tr>
@@ -206,6 +214,7 @@
                         <th class="px-4 py-3 text-left">{{ __('Average') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
+                        <th class="px-4 py-3 text-left">{{ __('BUST') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('180er') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Platzierung') }}</th>
                     </tr>
@@ -252,6 +261,13 @@
                                     —
                                 @endif
                             </td>
+                            <td class="px-4 py-3">
+                                @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                    <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
+                                @else
+                                    0
+                                @endif
+                            </td>
                             <td class="px-4 py-3">{{ $player->pivot->total_180s ?? 0 }}</td>
                             <td class="px-4 py-3">
                                 @if ($player->pivot->final_position)
@@ -265,7 +281,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                            <td colspan="9" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                                 {{ __('Keine Spieler vorhanden.') }}
                             </td>
                         </tr>

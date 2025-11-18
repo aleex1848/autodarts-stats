@@ -53,6 +53,7 @@ class Leg extends Model
                 'darts_thrown',
                 'checkout_attempts',
                 'checkout_hits',
+                'busted_count',
             ])
             ->withTimestamps();
     }
