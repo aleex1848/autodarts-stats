@@ -206,6 +206,11 @@ class WebhookProcessing extends ProcessWebhookJob
 
                 // Calculate and update final positions for all players
                 $this->updateFinalPositions($match, $matchData);
+
+                // Derive winner from final_position if winner_player_id is still null
+                if ($match->winner_player_id === null) {
+                    $this->deriveWinnerFromFinalPosition($match);
+                }
             }
 
             // Process turns from match state (for correction detection)
@@ -954,6 +959,60 @@ class WebhookProcessing extends ProcessWebhookJob
                     'final_position' => $position + 1,
                 ]);
             }
+        }
+    }
+
+    protected function deriveWinnerFromFinalPosition(DartMatch $match): void
+    {
+        // Only derive winner if match is finished and winner is not already set
+        if (! $match->finished_at || $match->winner_player_id !== null) {
+            return;
+        }
+
+        // Reload players with pivot data to ensure we have the latest data
+        $match->load('players');
+        $players = $match->players;
+
+        // First, try to find winner based on legs_won and sets_won (most reliable)
+        $playerScores = $players->map(function ($player) {
+            return [
+                'player' => $player,
+                'sets' => $player->pivot->sets_won ?? 0,
+                'legs' => $player->pivot->legs_won ?? 0,
+            ];
+        })->sortByDesc(function ($data) {
+            // Sort by sets first, then by legs
+            return [$data['sets'], $data['legs']];
+        })->values();
+
+        // Check if there's a clear winner (more sets or more legs)
+        if ($playerScores->count() >= 2) {
+            $first = $playerScores->first();
+            $second = $playerScores->get(1);
+
+            // Winner has more sets, or same sets but more legs
+            if ($first['sets'] > $second['sets'] || 
+                ($first['sets'] === $second['sets'] && $first['legs'] > $second['legs'])) {
+                
+                $winner = $first['player'];
+                
+                // Update final positions based on actual scores
+                foreach ($playerScores as $index => $data) {
+                    $match->players()->updateExistingPivot($data['player']->id, [
+                        'final_position' => $index + 1,
+                    ]);
+                }
+                
+                $match->update(['winner_player_id' => $winner->id]);
+                return;
+            }
+        }
+
+        // Fallback: use final_position = 1 if set
+        $winner = $players->firstWhere('pivot.final_position', 1);
+        
+        if ($winner) {
+            $match->update(['winner_player_id' => $winner->id]);
         }
     }
 

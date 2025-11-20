@@ -145,10 +145,14 @@ new class extends Component {
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                                @if ($match->winner)
-                                    <span class="font-semibold text-emerald-600 dark:text-emerald-400">
-                                        {{ $match->winner->is($player) ? __('Gewonnen') : __('Verloren') }}
-                                    </span>
+                                @if ($match->finished_at)
+                                    @if ($match->winner)
+                                        <span class="font-semibold text-emerald-600 dark:text-emerald-400">
+                                            {{ $match->winner->is($player) ? __('Gewonnen') : __('Verloren') }}
+                                        </span>
+                                    @else
+                                        <span class="text-zinc-500 dark:text-zinc-400">{{ __('Beendet') }}</span>
+                                    @endif
                                 @else
                                     <span class="text-zinc-500 dark:text-zinc-400">{{ __('Noch offen') }}</span>
                                 @endif
