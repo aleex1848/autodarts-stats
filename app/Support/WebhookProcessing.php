@@ -186,30 +186,46 @@ class WebhookProcessing extends ProcessWebhookJob
 
             // Update match status (after players are synced)
             if ($matchData['finished'] ?? false) {
-                $updateData = [
-                    'finished_at' => now(),
-                ];
+                // Refresh match to avoid race conditions with concurrent webhook processing
+                $match->refresh();
 
-                // Try to find winner if winner index is provided
-                $winnerIndex = $matchData['winner'] ?? $matchData['gameWinner'] ?? null;
-                if ($winnerIndex !== null && isset($matchData['players'][$winnerIndex])) {
-                    $winnerPlayerId = $matchData['players'][$winnerIndex]['userId'] ?? null;
-                    if ($winnerPlayerId) {
-                        $winner = Player::where('autodarts_user_id', $winnerPlayerId)->first();
-                        if ($winner) {
-                            $updateData['winner_player_id'] = $winner->id;
+                // Only update if not already finished (to avoid race condition issues)
+                if ($match->finished_at === null) {
+                    $updateData = [
+                        'finished_at' => now(),
+                    ];
+
+                    // Try to find winner if winner index is provided
+                    // Prefer gameWinner over winner as it's more reliable (array index vs player index confusion)
+                    $winnerIndex = $matchData['gameWinner'] ?? $matchData['winner'] ?? null;
+                    if ($winnerIndex !== null && isset($matchData['players'][$winnerIndex])) {
+                        $winnerPlayerId = $matchData['players'][$winnerIndex]['userId'] ?? null;
+                        if ($winnerPlayerId) {
+                            $winner = Player::where('autodarts_user_id', $winnerPlayerId)->first();
+                            if ($winner) {
+                                $updateData['winner_player_id'] = $winner->id;
+                            }
+                        } else {
+                            // Winner has no userId (Bot) - find by player_index
+                            $match->load('players');
+                            foreach ($match->players as $player) {
+                                if ($player->pivot->player_index === (int) $winnerIndex) {
+                                    $updateData['winner_player_id'] = $player->id;
+                                    break;
+                                }
+                            }
                         }
                     }
-                }
 
-                $match->update($updateData);
+                    $match->update($updateData);
 
-                // Calculate and update final positions for all players
-                $this->updateFinalPositions($match, $matchData);
+                    // Calculate and update final positions for all players
+                    $this->updateFinalPositions($match, $matchData);
 
-                // Derive winner from final_position if winner_player_id is still null
-                if ($match->winner_player_id === null) {
-                    $this->deriveWinnerFromFinalPosition($match);
+                    // Derive winner from final_position if winner_player_id is still null
+                    if ($match->winner_player_id === null) {
+                        $this->deriveWinnerFromFinalPosition($match);
+                    }
                 }
             }
 
@@ -247,6 +263,8 @@ class WebhookProcessing extends ProcessWebhookJob
 
             if ($existingTurn) {
                 // Turn already exists - update busted flag and other fields, but keep existing leg
+                // Refresh to avoid race conditions with concurrent webhook processing
+                $existingTurn->refresh();
                 $leg = $existingTurn->leg;
 
                 // Parse timestamps, treating invalid dates as null
@@ -272,7 +290,18 @@ class WebhookProcessing extends ProcessWebhookJob
                     $updateData['busted'] = (bool) $turnData['busted'];
                 }
 
-                $existingTurn->update($updateData);
+                // Use try-catch to silently handle race condition errors
+                try {
+                    $existingTurn->update($updateData);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // If error 1020 (record changed), another webhook already updated it - that's fine
+                    if ($e->getCode() !== 'HY000' || ! str_contains($e->getMessage(), '1020')) {
+                        throw $e; // Re-throw if it's a different error
+                    }
+                    // Silently ignore race condition errors and refresh to get latest data
+                    $existingTurn->refresh();
+                }
+
                 $turn = $existingTurn;
             } else {
                 // Turn doesn't exist - create it for the current leg
@@ -516,18 +545,42 @@ class WebhookProcessing extends ProcessWebhookJob
         // This handles cases where Autodarts sends different userIds for the same user
         $playerByName = Player::where('name', $name)->first();
         if ($playerByName) {
-            // Found a player with the same name - update the autodarts_user_id if it's different
-            // This helps consolidate duplicate players
-            Log::info('Player found by name but different autodarts_user_id', [
-                'name' => $name,
-                'existing_user_id' => $playerByName->autodarts_user_id,
-                'new_user_id' => $userId,
-            ]);
+            // Detect if this is a bot player (name like "Bot Level X" or starts with "Bot")
+            $isBot = preg_match('/^Bot\s+/i', $name);
+            $newUuidIsBot = str_starts_with($userId, '00000000-0000-0000');
+            $existingUuidIsBot = str_starts_with($playerByName->autodarts_user_id, '00000000-0000-0000');
+
+            // Only log warning for real users (not bots), as bots get new IDs per game
+            if (! $isBot && ! $newUuidIsBot && ! $existingUuidIsBot) {
+                Log::info('Player found by name but different autodarts_user_id', [
+                    'name' => $name,
+                    'existing_user_id' => $playerByName->autodarts_user_id,
+                    'new_user_id' => $userId,
+                ]);
+            }
+
+            // For bots: prefer our deterministic bot UUID over Autodarts' random UUIDs
+            if ($isBot && $newUuidIsBot && ! $existingUuidIsBot) {
+                // Replace Autodarts' random bot UUID with our deterministic one
+                try {
+                    $playerByName->update(array_merge([
+                        'autodarts_user_id' => $userId,
+                        'name' => $name,
+                    ], $additionalValues));
+
+                    return $playerByName->fresh();
+                } catch (UniqueConstraintViolationException|QueryException $e) {
+                    // Another player already has this UUID, just update values
+                    $playerByName->update(array_merge(['name' => $name], $additionalValues));
+
+                    return $playerByName;
+                }
+            }
 
             // Only update if the new userId is more "valid" (not a bot UUID)
             // Bot UUIDs start with 00000000, real user IDs don't
-            if (str_starts_with($userId, '00000000-0000-0000')) {
-                // New userId is a bot UUID, keep the existing one
+            if ($newUuidIsBot) {
+                // New userId is a bot UUID, keep the existing one (unless we're replacing it above)
                 $playerByName->update($additionalValues);
 
                 return $playerByName;
@@ -918,11 +971,12 @@ class WebhookProcessing extends ProcessWebhookJob
 
     protected function updateFinalPositions(DartMatch $match, array $matchData): void
     {
-        $winnerIndex = $matchData['winner'] ?? $matchData['gameWinner'] ?? null;
+        // Prefer gameWinner over winner as it's more reliable (array index vs player index confusion)
+        $winnerIndex = $matchData['gameWinner'] ?? $matchData['winner'] ?? null;
         $players = $match->players;
 
         if ($winnerIndex !== null) {
-            // Simple case: winner index is provided
+            // Simple case: winner index is provided (as array index in players array)
             // Winner gets position 1, others get position 2
             foreach ($players as $player) {
                 $position = ($player->pivot->player_index === (int) $winnerIndex) ? 1 : 2;
@@ -991,26 +1045,27 @@ class WebhookProcessing extends ProcessWebhookJob
             $second = $playerScores->get(1);
 
             // Winner has more sets, or same sets but more legs
-            if ($first['sets'] > $second['sets'] || 
+            if ($first['sets'] > $second['sets'] ||
                 ($first['sets'] === $second['sets'] && $first['legs'] > $second['legs'])) {
-                
+
                 $winner = $first['player'];
-                
+
                 // Update final positions based on actual scores
                 foreach ($playerScores as $index => $data) {
                     $match->players()->updateExistingPivot($data['player']->id, [
                         'final_position' => $index + 1,
                     ]);
                 }
-                
+
                 $match->update(['winner_player_id' => $winner->id]);
+
                 return;
             }
         }
 
         // Fallback: use final_position = 1 if set
         $winner = $players->firstWhere('pivot.final_position', 1);
-        
+
         if ($winner) {
             $match->update(['winner_player_id' => $winner->id]);
         }
