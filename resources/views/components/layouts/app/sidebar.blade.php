@@ -69,6 +69,15 @@
                         >
                             {{ __('Rollen') }}
                         </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="arrow-down-tray"
+                            :href="route('admin.downloads.index')"
+                            :current="request()->routeIs('admin.downloads.*') || request()->routeIs('admin.download-categories.*')"
+                            wire:navigate
+                        >
+                            {{ __('Downloads') }}
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endhasanyrole
             </flux:navlist>
@@ -183,6 +192,8 @@
         </flux:header>
 
         {{ $slot }}
+
+        <x-notifications />
 
         @fluxScripts
     </body>
