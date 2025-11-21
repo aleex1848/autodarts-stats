@@ -200,6 +200,18 @@ new class extends Component
         'backLabel' => __('Zurück zu meinen Matches'),
     ])
 
+    @hasanyrole('Super-Admin|Admin')
+        <div class="flex justify-end gap-2">
+            <flux:button
+                variant="outline"
+                icon="arrow-down-tray"
+                :href="route('matches.export', $match)"
+            >
+                {{ __('Match exportieren') }}
+            </flux:button>
+        </div>
+    @endhasanyrole
+
 @if ($match->variant === 'X01')
     <section class="w-full space-y-6">
         <div class="flex flex-wrap items-start justify-between gap-4">

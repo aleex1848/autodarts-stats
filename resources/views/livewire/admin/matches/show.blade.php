@@ -86,6 +86,13 @@ new class extends Component {
 
 <div class="flex justify-end gap-2">
     <flux:button
+        variant="outline"
+        icon="arrow-down-tray"
+        :href="route('admin.matches.export', $match)"
+    >
+        {{ __('Match exportieren') }}
+    </flux:button>
+    <flux:button
         variant="danger"
         icon="arrow-path"
         wire:click="reprocessMatch"
