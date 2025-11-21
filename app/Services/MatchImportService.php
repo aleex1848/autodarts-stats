@@ -34,8 +34,14 @@ class MatchImportService
             $playerMap = $this->importPlayers($data['players'] ?? []);
 
             // Update winner_player_id if it exists in playerMap
-            if (isset($data['match']['winner_player_id']) && isset($playerMap[$data['match']['winner_player_id']])) {
-                $match->winner_player_id = $playerMap[$data['match']['winner_player_id']];
+            if (isset($data['match']['winner_player_id']) && $data['match']['winner_player_id'] !== null) {
+                if (isset($playerMap[$data['match']['winner_player_id']])) {
+                    $match->winner_player_id = $playerMap[$data['match']['winner_player_id']];
+                    $match->save();
+                }
+            } else {
+                // If winner_player_id was null in export, ensure it's null
+                $match->winner_player_id = null;
                 $match->save();
             }
 
@@ -79,6 +85,7 @@ class MatchImportService
 
     protected function importMatchData(array $matchData, ?DartMatch $existingMatch): DartMatch
     {
+        // Don't set winner_player_id here - it will be updated after players are imported
         $matchDataToSave = [
             'autodarts_match_id' => $matchData['autodarts_match_id'],
             'variant' => $matchData['variant'],
@@ -88,12 +95,14 @@ class MatchImportService
             'out_mode' => $matchData['out_mode'],
             'bull_mode' => $matchData['bull_mode'],
             'max_rounds' => $matchData['max_rounds'],
-            'winner_player_id' => $matchData['winner_player_id'],
+            'winner_player_id' => null, // Will be updated after players are imported
             'started_at' => $matchData['started_at'] ? \Carbon\Carbon::parse($matchData['started_at']) : null,
             'finished_at' => $matchData['finished_at'] ? \Carbon\Carbon::parse($matchData['finished_at']) : null,
         ];
 
         if ($existingMatch) {
+            // For existing matches, also set winner_player_id to null initially
+            $matchDataToSave['winner_player_id'] = null;
             $existingMatch->update($matchDataToSave);
 
             return $existingMatch;
