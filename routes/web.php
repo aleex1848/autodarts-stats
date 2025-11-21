@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DartMatch;
+use App\Models\League;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 use Livewire\Volt\Volt;
@@ -14,6 +15,7 @@ Route::view('dashboard', 'dashboard')
     ->name('dashboard');
 
 Route::model('match', DartMatch::class);
+Route::model('league', League::class);
 
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
@@ -41,6 +43,11 @@ Route::middleware(['auth', 'verified'])
         Volt::route('matches/{match}', 'matches.show')
             ->middleware('can:view,match')
             ->name('matches.show');
+
+        Volt::route('leagues', 'leagues.index')->name('leagues.index');
+        Volt::route('leagues/{league}', 'leagues.show')
+            ->middleware('can:view,league')
+            ->name('leagues.show');
     });
 
 Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
@@ -54,4 +61,13 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         Volt::route('admin/matches/{match}', 'admin.matches.show')
             ->middleware('can:view,match')
             ->name('matches.show');
+
+        Volt::route('admin/leagues', 'admin.leagues.index')->name('leagues.index');
+        Volt::route('admin/leagues/create', 'admin.leagues.create')->name('leagues.create');
+        Volt::route('admin/leagues/{league}', 'admin.leagues.show')
+            ->middleware('can:view,league')
+            ->name('leagues.show');
+        Volt::route('admin/leagues/{league}/edit', 'admin.leagues.edit')
+            ->middleware('can:update,league')
+            ->name('leagues.edit');
     });

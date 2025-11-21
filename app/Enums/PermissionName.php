@@ -13,4 +13,10 @@ enum PermissionName: string
     case RolesCreate = 'roles.create';
     case RolesUpdate = 'roles.update';
     case RolesDelete = 'roles.delete';
+
+    case LeaguesView = 'leagues.view';
+    case LeaguesCreate = 'leagues.create';
+    case LeaguesUpdate = 'leagues.update';
+    case LeaguesDelete = 'leagues.delete';
+    case LeaguesManage = 'leagues.manage';
 }

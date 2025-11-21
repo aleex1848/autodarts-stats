@@ -17,10 +17,18 @@
                     <flux:navlist.item
                         icon="trophy"
                         :href="route('matches.index')"
-                        :current="request()->routeIs('matches.*')"
+                        :current="request()->routeIs('matches.*') && !request()->routeIs('admin.*')"
                         wire:navigate
                     >
                         {{ __('Matches') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item
+                        icon="flag"
+                        :href="route('leagues.index')"
+                        :current="request()->routeIs('leagues.*') && !request()->routeIs('admin.*')"
+                        wire:navigate
+                    >
+                        {{ __('Ligen') }}
                     </flux:navlist.item>
                 </flux:navlist.group>
 
@@ -33,6 +41,15 @@
                             wire:navigate
                         >
                             {{ __('Matches') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="flag"
+                            :href="route('admin.leagues.index')"
+                            :current="request()->routeIs('admin.leagues.*')"
+                            wire:navigate
+                        >
+                            {{ __('Ligen') }}
                         </flux:navlist.item>
 
                         <flux:navlist.item
