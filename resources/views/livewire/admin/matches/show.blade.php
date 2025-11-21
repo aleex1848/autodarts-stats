@@ -65,40 +65,42 @@ new class extends Component {
     }
 }; ?>
 
-@include('livewire.matches.partials.details', [
-    'title' => __('Match-Details (Admin)'),
-    'subtitle' => __('Vollständige Analyse des ausgewählten Matches'),
-    'backUrl' => route('admin.matches.index'),
-    'backLabel' => __('Zurück zur Übersicht'),
-])
+<div>
+    @include('livewire.matches.partials.details', [
+        'title' => __('Match-Details (Admin)'),
+        'subtitle' => __('Vollständige Analyse des ausgewählten Matches'),
+        'backUrl' => route('admin.matches.index'),
+        'backLabel' => __('Zurück zur Übersicht'),
+    ])
 
-@if (session('success'))
-    <div class="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/50 dark:text-green-200">
-        {{ session('success') }}
+    @if (session('success'))
+        <div class="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/50 dark:text-green-200">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/50 dark:text-red-200">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    <div class="flex justify-end gap-2">
+        <flux:button
+            variant="outline"
+            icon="arrow-down-tray"
+            :href="route('admin.matches.export', $match)"
+        >
+            {{ __('Match exportieren') }}
+        </flux:button>
+        <flux:button
+            variant="danger"
+            icon="arrow-path"
+            wire:click="reprocessMatch"
+            wire:confirm="{{ __('Sind Sie sicher, dass Sie dieses Match erneut verarbeiten möchten? Alle verarbeiteten Daten werden gelöscht und die Rohdaten werden erneut verarbeitet. Diese Aktion kann nicht rückgängig gemacht werden.') }}"
+        >
+            {{ __('Match erneut verarbeiten') }}
+        </flux:button>
     </div>
-@endif
-
-@if (session('error'))
-    <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/50 dark:text-red-200">
-        {{ session('error') }}
-    </div>
-@endif
-
-<div class="flex justify-end gap-2">
-    <flux:button
-        variant="outline"
-        icon="arrow-down-tray"
-        :href="route('admin.matches.export', $match)"
-    >
-        {{ __('Match exportieren') }}
-    </flux:button>
-    <flux:button
-        variant="danger"
-        icon="arrow-path"
-        wire:click="reprocessMatch"
-        wire:confirm="{{ __('Sind Sie sicher, dass Sie dieses Match erneut verarbeiten möchten? Alle verarbeiteten Daten werden gelöscht und die Rohdaten werden erneut verarbeitet. Diese Aktion kann nicht rückgängig gemacht werden.') }}"
-    >
-        {{ __('Match erneut verarbeiten') }}
-    </flux:button>
 </div>
 
