@@ -8,6 +8,7 @@ use App\Models\Leg;
 use App\Models\MatchPlayer;
 use App\Models\Player;
 use App\Models\Turn;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\WebhookClient\Models\WebhookCall;
@@ -116,6 +117,13 @@ class MatchImportService
         $playerMap = [];
 
         foreach ($playersData as $playerData) {
+            // Validate user_id - only use it if the user exists
+            $userId = null;
+            if (isset($playerData['user_id']) && $playerData['user_id'] !== null) {
+                $userExists = User::where('id', $playerData['user_id'])->exists();
+                $userId = $userExists ? $playerData['user_id'] : null;
+            }
+
             // Try to find existing player by autodarts_user_id or name
             $player = Player::where('autodarts_user_id', $playerData['autodarts_user_id'])
                 ->orWhere('name', $playerData['name'])
@@ -128,7 +136,7 @@ class MatchImportService
                     'email' => $playerData['email'],
                     'country' => $playerData['country'],
                     'avatar_url' => $playerData['avatar_url'],
-                    'user_id' => $playerData['user_id'],
+                    'user_id' => $userId,
                 ]);
             } else {
                 // Update existing player
@@ -138,7 +146,7 @@ class MatchImportService
                     'email' => $playerData['email'],
                     'country' => $playerData['country'],
                     'avatar_url' => $playerData['avatar_url'],
-                    'user_id' => $playerData['user_id'],
+                    'user_id' => $userId,
                 ]);
             }
 
