@@ -101,7 +101,7 @@ new class extends Component {
             Session::flash('success', __('Match wurde erfolgreich importiert.'));
             $this->closeImportModal();
 
-            return redirect()->route('admin.matches.show', $match);
+            $this->redirect(route('admin.matches.show', $match));
         } catch (\Exception $e) {
             Session::flash('error', __('Fehler beim Importieren: :message', ['message' => $e->getMessage()]));
             $this->closeImportModal();
