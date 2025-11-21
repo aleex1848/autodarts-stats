@@ -55,14 +55,14 @@ class MatchImportService
             // Import leg_player pivot data
             $this->importLegPlayers($data['legs'] ?? [], $legMap, $playerMap);
 
+            // Import webhook calls first (throws need webhook_call_id)
+            $webhookCallMap = $this->importWebhookCalls($data['webhook_calls'] ?? []);
+
             // Import turns
             $turnMap = $this->importTurns($data['turns'] ?? [], $legMap, $playerMap);
 
-            // Import throws
-            $this->importThrows($data['throws'] ?? [], $turnMap);
-
-            // Import webhook calls
-            $this->importWebhookCalls($data['webhook_calls'] ?? []);
+            // Import throws (with webhook_call_id mapping)
+            $this->importThrows($data['throws'] ?? [], $turnMap, $webhookCallMap);
 
             Log::info('Match imported successfully', [
                 'match_id' => $match->id,
@@ -286,7 +286,7 @@ class MatchImportService
         return $turnMap;
     }
 
-    protected function importThrows(array $throwsData, array $turnMap): void
+    protected function importThrows(array $throwsData, array $turnMap, array $webhookCallMap): void
     {
         // Get all turn IDs to delete existing throws
         $turnIds = array_values($turnMap);
@@ -299,10 +299,22 @@ class MatchImportService
                 continue;
             }
 
+            // Map webhook_call_id - use mapped ID if available, otherwise validate it exists
+            $webhookCallId = null;
+            if (isset($throwData['webhook_call_id']) && $throwData['webhook_call_id'] !== null) {
+                if (isset($webhookCallMap[$throwData['webhook_call_id']])) {
+                    $webhookCallId = $webhookCallMap[$throwData['webhook_call_id']];
+                } else {
+                    // Check if webhook call exists with this ID
+                    $webhookCallExists = WebhookCall::where('id', $throwData['webhook_call_id'])->exists();
+                    $webhookCallId = $webhookCallExists ? $throwData['webhook_call_id'] : null;
+                }
+            }
+
             DartThrow::create([
                 'turn_id' => $turnMap[$throwData['turn_id']],
                 'autodarts_throw_id' => $throwData['autodarts_throw_id'],
-                'webhook_call_id' => $throwData['webhook_call_id'],
+                'webhook_call_id' => $webhookCallId,
                 'dart_number' => $throwData['dart_number'],
                 'segment_number' => $throwData['segment_number'],
                 'multiplier' => $throwData['multiplier'],
@@ -318,11 +330,15 @@ class MatchImportService
         }
     }
 
-    protected function importWebhookCalls(array $webhookCallsData): void
+    protected function importWebhookCalls(array $webhookCallsData): array
     {
+        $webhookCallMap = [];
+
         foreach ($webhookCallsData as $webhookCallData) {
+            $oldId = $webhookCallData['id'];
+            
             // Check if webhook call already exists
-            $existing = WebhookCall::find($webhookCallData['id']);
+            $existing = WebhookCall::find($oldId);
 
             if ($existing) {
                 // Update existing webhook call
@@ -333,29 +349,34 @@ class MatchImportService
                     'payload' => $webhookCallData['payload'],
                     'exception' => $webhookCallData['exception'],
                 ]);
+                $webhookCallMap[$oldId] = $existing->id;
             } else {
                 // Create new webhook call (may need to handle ID conflicts)
                 try {
-                    WebhookCall::create([
-                        'id' => $webhookCallData['id'],
+                    $webhookCall = WebhookCall::create([
+                        'id' => $oldId,
                         'name' => $webhookCallData['name'],
                         'url' => $webhookCallData['url'],
                         'headers' => $webhookCallData['headers'],
                         'payload' => $webhookCallData['payload'],
                         'exception' => $webhookCallData['exception'],
                     ]);
+                    $webhookCallMap[$oldId] = $webhookCall->id;
                 } catch (\Exception $e) {
                     // If ID conflict, create without ID
-                    WebhookCall::create([
+                    $webhookCall = WebhookCall::create([
                         'name' => $webhookCallData['name'],
                         'url' => $webhookCallData['url'],
                         'headers' => $webhookCallData['headers'],
                         'payload' => $webhookCallData['payload'],
                         'exception' => $webhookCallData['exception'],
                     ]);
+                    $webhookCallMap[$oldId] = $webhookCall->id;
                 }
             }
         }
+
+        return $webhookCallMap;
     }
 }
 
