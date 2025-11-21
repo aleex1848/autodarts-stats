@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DartMatch;
+use App\Models\League;
 use App\Models\Download;
 use App\Services\MatchExportService;
 use App\Services\MatchImportService;
@@ -18,6 +19,7 @@ Route::view('dashboard', 'dashboard')
     ->name('dashboard');
 
 Route::model('match', DartMatch::class);
+Route::model('league', League::class);
 Route::model('download', Download::class);
 
 Route::middleware(['auth'])->group(function () {
@@ -47,6 +49,10 @@ Route::middleware(['auth', 'verified'])
             ->middleware('can:view,match')
             ->name('matches.show');
 
+        Volt::route('leagues', 'leagues.index')->name('leagues.index');
+        Volt::route('leagues/{league}', 'leagues.show')
+            ->middleware('can:view,league')
+            ->name('leagues.show');
         // Export route (only for admins)
         Route::get('matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
             if (! auth()->user()->hasAnyRole(['Super-Admin', 'Admin'])) {
@@ -104,6 +110,14 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
             ->middleware('can:view,match')
             ->name('matches.show');
 
+        Volt::route('admin/leagues', 'admin.leagues.index')->name('leagues.index');
+        Volt::route('admin/leagues/create', 'admin.leagues.create')->name('leagues.create');
+        Volt::route('admin/leagues/{league}', 'admin.leagues.show')
+            ->middleware('can:view,league')
+            ->name('leagues.show');
+        Volt::route('admin/leagues/{league}/edit', 'admin.leagues.edit')
+            ->middleware('can:update,league')
+            ->name('leagues.edit');
         // Export route
         Route::get('admin/matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
             $data = $exportService->exportMatch($match);

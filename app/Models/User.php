@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -88,5 +89,15 @@ class User extends Authenticatable
         return DartMatch::whereHas('players', function ($query) {
             $query->where('players.user_id', $this->id);
         });
+    }
+
+    public function createdLeagues(): HasMany
+    {
+        return $this->hasMany(League::class, 'created_by_user_id');
+    }
+
+    public function leagueRegistrations(): HasMany
+    {
+        return $this->hasMany(LeagueRegistration::class);
     }
 }
