@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DartMatch;
+use App\Models\Download;
 use App\Services\MatchExportService;
 use App\Services\MatchImportService;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ Route::view('dashboard', 'dashboard')
     ->name('dashboard');
 
 Route::model('match', DartMatch::class);
+Route::model('download', Download::class);
 
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
@@ -52,11 +54,11 @@ Route::middleware(['auth', 'verified'])
             }
 
             $data = $exportService->exportMatch($match);
-            $filename = 'match-' . $match->autodarts_match_id . '-' . now()->format('Y-m-d-His') . '.json';
+            $filename = 'match-'.$match->autodarts_match_id.'-'.now()->format('Y-m-d-His').'.json';
 
             return response()->json($data, 200, [
                 'Content-Type' => 'application/json',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
             ]);
         })->middleware('can:view,match')->name('matches.export');
 
@@ -105,11 +107,11 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         // Export route
         Route::get('admin/matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
             $data = $exportService->exportMatch($match);
-            $filename = 'match-' . $match->autodarts_match_id . '-' . now()->format('Y-m-d-His') . '.json';
+            $filename = 'match-'.$match->autodarts_match_id.'-'.now()->format('Y-m-d-His').'.json';
 
             return response()->json($data, 200, [
                 'Content-Type' => 'application/json',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
             ]);
         })->middleware('can:view,match')->name('matches.export');
 
@@ -137,4 +139,29 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
                 return back()->withErrors(['file' => $e->getMessage()]);
             }
         })->name('matches.import');
+
+        // Downloads routes
+        Volt::route('admin/downloads', 'admin.downloads.index')->name('downloads.index');
+        Volt::route('admin/downloads/create', 'admin.downloads.create')->name('downloads.create');
+        Volt::route('admin/downloads/{download}', 'admin.downloads.show')->name('downloads.show');
+
+        // Download categories routes
+        Volt::route('admin/download-categories', 'admin.download-categories.index')->name('download-categories.index');
+    });
+
+Route::middleware(['auth', 'verified'])
+    ->group(function () {
+        // Public download routes
+        Volt::route('downloads/{download}', 'downloads.show')->name('downloads.show');
+
+        // Download file route
+        Route::get('downloads/{download}/file', function (Download $download) {
+            $media = $download->getFirstMedia('files');
+
+            if (! $media) {
+                abort(404);
+            }
+
+            return $media;
+        })->name('downloads.file');
     });
