@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DartMatch extends Model
 {
@@ -71,6 +72,11 @@ class DartMatch extends Model
     public function matchPlayers(): HasMany
     {
         return $this->hasMany(MatchPlayer::class, 'match_id');
+    }
+
+    public function fixture(): HasOne
+    {
+        return $this->hasOne(MatchdayFixture::class, 'dart_match_id');
     }
 
     public function scopeFinished(Builder $query): void

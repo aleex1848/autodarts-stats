@@ -1,11 +1,14 @@
 <?php
 
+use App\Actions\AssignMatchToFixture;
 use App\Actions\SplitLeague;
 use App\Enums\LeagueStatus;
 use App\Enums\RegistrationStatus;
+use App\Models\DartMatch;
 use App\Models\League;
 use App\Models\LeagueParticipant;
 use App\Models\LeagueRegistration;
+use App\Models\MatchdayFixture;
 use App\Models\Player;
 use App\Services\LeagueScheduler;
 use App\Services\LeagueStandingsCalculator;
@@ -19,7 +22,10 @@ new class extends Component {
     public string $activeTab = 'overview';
     public bool $showAddParticipantModal = false;
     public bool $showSplitModal = false;
+    public bool $showAssignMatchModal = false;
     public ?int $selectedPlayerId = null;
+    public ?int $selectedFixtureId = null;
+    public ?int $selectedMatchId = null;
     public string $playerSearch = '';
     public int $numberOfSplits = 2;
 
@@ -52,6 +58,7 @@ new class extends Component {
                 ->orderBy('name')
                 ->limit(20)
                 ->get(),
+            'availableMatches' => $this->getAvailableMatches(),
         ];
     }
 
@@ -162,6 +169,64 @@ new class extends Component {
         $this->dispatch('notify', title: __('Liga wurde aufgeteilt'));
         
         $this->redirect(route('admin.leagues.index'), navigate: true);
+    }
+
+    public function openAssignMatchModal(int $fixtureId): void
+    {
+        $this->selectedFixtureId = $fixtureId;
+        $this->selectedMatchId = null;
+        $this->showAssignMatchModal = true;
+    }
+
+    public function assignMatch(): void
+    {
+        \Log::info('assignMatch called', [
+            'fixtureId' => $this->selectedFixtureId,
+            'matchId' => $this->selectedMatchId,
+        ]);
+
+        if (!$this->selectedFixtureId || !$this->selectedMatchId) {
+            $this->dispatch('notify', title: __('Bitte wähle ein Match aus'), variant: 'error');
+            
+            return;
+        }
+
+        $fixture = MatchdayFixture::findOrFail($this->selectedFixtureId);
+        $match = DartMatch::findOrFail($this->selectedMatchId);
+
+        try {
+            app(AssignMatchToFixture::class)->handle($match, $fixture);
+            
+            $this->showAssignMatchModal = false;
+            $this->selectedFixtureId = null;
+            $this->selectedMatchId = null;
+            
+            $this->dispatch('notify', title: __('Match erfolgreich zugeordnet'));
+        } catch (\Exception $e) {
+            \Log::error('Match assignment failed', ['error' => $e->getMessage()]);
+            $this->dispatch('notify', title: $e->getMessage(), variant: 'error');
+        }
+    }
+
+    protected function getAvailableMatches()
+    {
+        if (!$this->selectedFixtureId) {
+            return collect();
+        }
+
+        $fixture = MatchdayFixture::find($this->selectedFixtureId);
+        if (!$fixture) {
+            return collect();
+        }
+
+        // Hole fertige Matches mit beiden Spielern
+        return DartMatch::whereNotNull('finished_at')
+            ->whereHas('players', fn ($q) => $q->where('player_id', $fixture->home_player_id))
+            ->whereHas('players', fn ($q) => $q->where('player_id', $fixture->away_player_id))
+            ->whereDoesntHave('fixture') // Noch nicht zugeordnet
+            ->with(['players'])
+            ->latest('finished_at')
+            ->get();
     }
 }; ?>
 
@@ -502,6 +567,15 @@ new class extends Component {
                                             <flux:badge size="sm" :variant="$fixture->status === 'overdue' ? 'danger' : 'subtle'">
                                                 {{ __(ucfirst($fixture->status)) }}
                                             </flux:badge>
+                                            
+                                            <flux:button 
+                                                size="xs" 
+                                                variant="outline"
+                                                wire:click="openAssignMatchModal({{ $fixture->id }})"
+                                                icon="link"
+                                            >
+                                                {{ __('Match zuordnen') }}
+                                            </flux:button>
                                         @endif
                                     </div>
                                 </div>
@@ -665,6 +739,48 @@ new class extends Component {
 
                 <flux:button type="submit" variant="primary">
                     {{ __('Liga aufteilen') }}
+                </flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    <flux:modal wire:model="showAssignMatchModal" class="space-y-6">
+        <div>
+            <flux:heading size="lg">{{ __('Match zuordnen') }}</flux:heading>
+            <flux:subheading>{{ __('Wähle ein fertiges Match für dieses Fixture') }}</flux:subheading>
+        </div>
+
+        <form wire:submit.prevent="assignMatch" class="space-y-4">
+            <flux:select
+                wire:model.live="selectedMatchId"
+                :label="__('Fertiges Match')"
+                required
+            >
+                <option value="">{{ __('Match auswählen') }}</option>
+                @forelse ($availableMatches as $match)
+                    <option value="{{ $match->id }}">
+                        {{ $match->finished_at?->format('d.m.Y H:i') }} - 
+                        {{ $match->players->pluck('name')->implode(' vs ') }}
+                        ({{ $match->players->first()->pivot->legs_won ?? 0 }}:{{ $match->players->last()->pivot->legs_won ?? 0 }})
+                    </option>
+                @empty
+                    <option value="" disabled>{{ __('Keine passenden Matches gefunden') }}</option>
+                @endforelse
+            </flux:select>
+
+            @if ($availableMatches->isEmpty())
+                <flux:callout variant="info" icon="information-circle">
+                    {{ __('Es wurden keine fertigen Matches mit diesen beiden Spielern gefunden.') }}
+                </flux:callout>
+            @endif
+
+            <div class="flex justify-end gap-2">
+                <flux:button type="button" variant="ghost" wire:click="$set('showAssignMatchModal', false)">
+                    {{ __('Abbrechen') }}
+                </flux:button>
+
+                <flux:button type="submit" variant="primary">
+                    {{ __('Zuordnen') }}
                 </flux:button>
             </div>
         </form>
