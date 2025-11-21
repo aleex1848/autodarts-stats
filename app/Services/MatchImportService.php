@@ -215,7 +215,7 @@ class MatchImportService
         return $legMap;
     }
 
-    protected function importLegPlayers(array $legsData, array $legMap, array $playerMap): void
+    protected function importLegPlayers(array $legsData, array $legMap, array &$playerMap): void
     {
         foreach ($legsData as $legData) {
             if (! isset($legMap[$legData['id']])) {
@@ -229,8 +229,10 @@ class MatchImportService
             DB::table('leg_player')->where('leg_id', $newLegId)->delete();
 
             foreach ($legPlayers as $legPlayer) {
+                // Prüfe ob Spieler existiert, wenn nicht -> erstelle ihn
                 if (! isset($playerMap[$legPlayer['player_id']])) {
-                    continue;
+                    $player = $this->createUnknownPlayer($legPlayer['player_id']);
+                    $playerMap[$legPlayer['player_id']] = $player->id;
                 }
 
                 $newPlayerId = $playerMap[$legPlayer['player_id']];
@@ -252,7 +254,7 @@ class MatchImportService
         }
     }
 
-    protected function importTurns(array $turnsData, array $legMap, array $playerMap): array
+    protected function importTurns(array $turnsData, array $legMap, array &$playerMap): array
     {
         $turnMap = [];
 
@@ -263,8 +265,14 @@ class MatchImportService
         }
 
         foreach ($turnsData as $turnData) {
-            if (! isset($legMap[$turnData['leg_id']]) || ! isset($playerMap[$turnData['player_id']])) {
+            if (! isset($legMap[$turnData['leg_id']])) {
                 continue;
+            }
+
+            // Prüfe ob Spieler existiert, wenn nicht -> erstelle ihn
+            if (! isset($playerMap[$turnData['player_id']])) {
+                $player = $this->createUnknownPlayer($turnData['player_id']);
+                $playerMap[$turnData['player_id']] = $player->id;
             }
 
             $turn = Turn::create([
@@ -336,7 +344,7 @@ class MatchImportService
 
         foreach ($webhookCallsData as $webhookCallData) {
             $oldId = $webhookCallData['id'];
-            
+
             // Check if webhook call already exists
             $existing = WebhookCall::find($oldId);
 
@@ -378,5 +386,16 @@ class MatchImportService
 
         return $webhookCallMap;
     }
-}
 
+    protected function createUnknownPlayer(int $originalPlayerId): Player
+    {
+        return Player::create([
+            'autodarts_user_id' => null,
+            'name' => "Unbekannter Spieler #{$originalPlayerId}",
+            'email' => null,
+            'country' => null,
+            'avatar_url' => null,
+            'user_id' => null,
+        ]);
+    }
+}
