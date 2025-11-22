@@ -44,7 +44,13 @@ new class extends Component
         ]);
 
         $this->legs = $match->legs()
-            ->with(['winner', 'legPlayers'])
+            ->with([
+                'winner',
+                'legPlayers',
+                'turns' => fn ($query) => $query->orderBy('round_number'),
+                'turns.player',
+                'turns.throws' => fn ($query) => $query->orderBy('dart_number'),
+            ])
             ->orderBy('set_number')
             ->orderBy('leg_number')
             ->get();

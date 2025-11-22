@@ -24,7 +24,8 @@
         </div>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-3">
+    <!-- Kompakte Info-Karten oben -->
+    <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <div class="flex items-center justify-between">
                 <flux:heading size="md">{{ __('Matchübersicht') }}</flux:heading>
@@ -107,115 +108,9 @@
                 @endif
             </dl>
         </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-            <flux:heading size="md">{{ __('Spielverlauf') }}</flux:heading>
-
-            @if ($legs->isNotEmpty())
-                <div class="mt-4 space-y-4">
-                    @foreach ($legs as $leg)
-                        <div class="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
-                            <div class="mb-3 flex items-center justify-between">
-                                <span class="font-medium text-zinc-900 dark:text-zinc-100">
-                                    {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
-                                </span>
-                                <flux:badge variant="{{ $leg->winner ? 'success' : 'subtle' }}" size="sm">
-                                    {{ $leg->winner?->name ?? __('Offen') }}
-                                </flux:badge>
-                            </div>
-
-                            @if ($leg->started_at || $leg->finished_at)
-                                <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-                                    @if ($leg->started_at)
-                                        {{ __('Start:') }} {{ $leg->started_at->format('d.m.Y H:i:s') }}
-                                    @endif
-                                    @if ($leg->finished_at)
-                                        @if ($leg->started_at) · @endif
-                                        {{ __('Ende:') }} {{ $leg->finished_at->format('d.m.Y H:i:s') }}
-                                    @endif
-                                </p>
-                            @endif
-
-                            @if ($leg->legPlayers->isNotEmpty())
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-zinc-200 text-xs dark:divide-zinc-700">
-                                        <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
-                                            <tr>
-                                                <th class="px-3 py-2 text-left">{{ __('Spieler') }}</th>
-                                                @if ($match->variant === 'X01')
-                                                    <th class="px-3 py-2 text-right">{{ __('Average') }}</th>
-                                                    <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
-                                                    <th class="px-3 py-2 text-right">{{ __('Checkout %') }}</th>
-                                                    <th class="px-3 py-2 text-right">{{ __('BUST') }}</th>
-                                                @else
-                                                    <th class="px-3 py-2 text-right">{{ __('Pfeile') }}</th>
-                                                @endif
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
-                                            @foreach ($leg->legPlayers as $player)
-                                                <tr>
-                                                    <td class="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
-                                                        {{ $player->name }}
-                                                    </td>
-                                                    @if ($match->variant === 'X01')
-                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                            @if (! is_null($player->pivot->average))
-                                                                {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
-                                                            @else
-                                                                —
-                                                            @endif
-                                                        </td>
-                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                            @if (! is_null($player->pivot->darts_thrown))
-                                                                {{ $player->pivot->darts_thrown }}
-                                                            @else
-                                                                —
-                                                            @endif
-                                                        </td>
-                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                            @if (! is_null($player->pivot->checkout_rate))
-                                                                {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
-                                                                @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
-                                                                    ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
-                                                                @endif
-                                                            @else
-                                                                —
-                                                            @endif
-                                                        </td>
-                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                            @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
-                                                                <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
-                                                            @else
-                                                                0
-                                                            @endif
-                                                        </td>
-                                                    @else
-                                                        <td class="px-3 py-2 text-right text-zinc-600 dark:text-zinc-400">
-                                                            @if (! is_null($player->pivot->darts_thrown))
-                                                                {{ $player->pivot->darts_thrown }}
-                                                            @else
-                                                                —
-                                                            @endif
-                                                        </td>
-                                                    @endif
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-                            @endif
-                        </div>
-                    @endforeach
-                </div>
-            @else
-                <p class="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Für dieses Match wurden noch keine Legs aufgezeichnet.') }}
-                </p>
-            @endif
-        </div>
     </div>
 
+    <!-- Spielerübersicht in voller Breite -->
     <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         <div class="flex items-center justify-between">
             <div>
@@ -288,7 +183,7 @@
                                 </td>
                                 <td class="px-4 py-3">
                                     @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
-                                        <span class="text-red-600 dark:text-red-400 font-medium">{{ $player->pivot->busted_count }}</span>
+                                        <span class="font-medium text-red-600 dark:text-red-400">{{ $player->pivot->busted_count }}</span>
                                     @else
                                         0
                                     @endif
@@ -323,6 +218,117 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <!-- Spielverlauf in voller Breite -->
+    <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+        <flux:heading size="md">{{ __('Spielverlauf') }}</flux:heading>
+
+        @if ($legs->isNotEmpty())
+            <div class="mt-4 space-y-6">
+                @foreach ($legs as $leg)
+                    <div class="rounded-lg border border-zinc-200 p-6 dark:border-zinc-700">
+                        <div class="mb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                                    {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
+                                </span>
+                                @if ($leg->started_at || $leg->finished_at)
+                                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                        @if ($leg->started_at)
+                                            {{ __('Start:') }} {{ $leg->started_at->format('d.m.Y H:i:s') }}
+                                        @endif
+                                        @if ($leg->finished_at)
+                                            @if ($leg->started_at) · @endif
+                                            {{ __('Ende:') }} {{ $leg->finished_at->format('d.m.Y H:i:s') }}
+                                        @endif
+                                    </p>
+                                @endif
+                            </div>
+                            <flux:badge variant="{{ $leg->winner ? 'success' : 'subtle' }}">
+                                {{ $leg->winner?->name ?? __('Offen') }}
+                            </flux:badge>
+                        </div>
+
+                        @if ($leg->legPlayers->isNotEmpty())
+                            <div class="mb-6 overflow-x-auto">
+                                <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-700">
+                                    <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left">{{ __('Spieler') }}</th>
+                                            @if ($match->variant === 'X01')
+                                                <th class="px-4 py-3 text-right">{{ __('Average') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('Checkout %') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('BUST') }}</th>
+                                            @else
+                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
+                                            @endif
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
+                                        @foreach ($leg->legPlayers as $player)
+                                            <tr>
+                                                <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                                                    {{ $player->name }}
+                                                </td>
+                                                @if ($match->variant === 'X01')
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->average))
+                                                            {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->darts_thrown))
+                                                            {{ $player->pivot->darts_thrown }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->checkout_rate))
+                                                            {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                                            @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                                                ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                                            @endif
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                                            <span class="font-medium text-red-600 dark:text-red-400">{{ $player->pivot->busted_count }}</span>
+                                                        @else
+                                                            0
+                                                        @endif
+                                                    </td>
+                                                @else
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->darts_thrown))
+                                                            {{ $player->pivot->darts_thrown }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                @endif
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+
+                        @include('livewire.matches.partials.chalkboard', ['leg' => $leg])
+                    </div>
+                @endforeach
+            </div>
+        @else
+            <p class="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
+                {{ __('Für dieses Match wurden noch keine Legs aufgezeichnet.') }}
+            </p>
+        @endif
     </div>
 </section>
 
