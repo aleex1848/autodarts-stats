@@ -191,8 +191,26 @@ class WebhookProcessing extends ProcessWebhookJob
 
                 // Only update if not already finished (to avoid race condition issues)
                 if ($match->finished_at === null) {
+                    // Calculate started_at and finished_at from turn timestamps
+                    $firstTurn = Turn::query()
+                        ->select('turns.*')
+                        ->join('legs', 'turns.leg_id', '=', 'legs.id')
+                        ->where('legs.match_id', $match->id)
+                        ->whereNotNull('turns.started_at')
+                        ->orderBy('turns.started_at', 'asc')
+                        ->first();
+
+                    $lastTurn = Turn::query()
+                        ->select('turns.*')
+                        ->join('legs', 'turns.leg_id', '=', 'legs.id')
+                        ->where('legs.match_id', $match->id)
+                        ->whereNotNull('turns.started_at')
+                        ->orderBy('turns.started_at', 'desc')
+                        ->first();
+
                     $updateData = [
-                        'finished_at' => now(),
+                        'started_at' => $firstTurn?->started_at ?? $match->started_at ?? now(),
+                        'finished_at' => $lastTurn?->started_at ?? now(),
                     ];
 
                     // Try to find winner if winner index is provided
