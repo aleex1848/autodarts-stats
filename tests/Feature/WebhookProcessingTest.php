@@ -275,3 +275,48 @@ test('multiple throw events for same turn accumulate correctly', function () {
     expect($throws->first()->multiplier)->toBe(1);
     expect($throws->skip(1)->first()->multiplier)->toBe(3);
 });
+
+test('handleThrow can handle negative points from Bull-Out', function () {
+    $payload = [
+        'event' => 'throw',
+        'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+        'data' => [
+            'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+            'turnId' => '019a8d99-ae3a-7d85-9a89-af9677e1f49e',
+            'playerId' => '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9',
+            'playerName' => 'TestPlayer',
+            'leg' => 1,
+            'set' => 1,
+            'round' => 1,
+            'score' => -6, // Negative score from Bull-Out miss
+            'throw' => [
+                'id' => '019a8d9a-0689-7843-b956-e5bed41dece6',
+                'throw' => 0,
+                'segment' => [
+                    'number' => 25,
+                    'multiplier' => 1,
+                    'name' => 'S25',
+                    'bed' => 'SingleOuter',
+                ],
+                'coords' => [
+                    'x' => -0.006902184245127994,
+                    'y' => 0.4054243384459453,
+                ],
+                'createdAt' => '2025-11-16T16:57:53.034663222Z',
+            ],
+        ],
+    ];
+
+    $webhookCall = WebhookCall::create([
+        'name' => 'default',
+        'url' => 'test',
+        'payload' => $payload,
+    ]);
+
+    $job = new WebhookProcessing($webhookCall);
+    $job->handle();
+
+    $turn = Turn::first();
+    expect($turn)->not->toBeNull();
+    expect($turn->points)->toBe(-6); // Negative points should be allowed
+});

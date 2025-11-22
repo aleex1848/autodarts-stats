@@ -50,14 +50,15 @@ class MatchReprocessingService
             Log::debug('Deleted match_player entries', ['count' => $matchPlayerDeleted]);
 
             // Reset match status fields (but keep the match itself)
+            // Use default values instead of null for non-nullable columns
             $match->update([
                 'winner_player_id' => null,
                 'finished_at' => null,
-                'base_score' => null,
-                'in_mode' => null,
-                'out_mode' => null,
-                'bull_mode' => null,
-                'max_rounds' => null,
+                'base_score' => 501,
+                'in_mode' => 'Straight',
+                'out_mode' => 'Straight',
+                'bull_mode' => '25/50',
+                'max_rounds' => 20,
             ]);
 
             // Find all WebhookCalls for this match
@@ -92,4 +93,3 @@ class MatchReprocessingService
         });
     }
 }
-
