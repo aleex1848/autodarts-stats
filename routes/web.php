@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\DartMatch;
-use App\Models\League;
 use App\Models\Download;
+use App\Models\League;
 use App\Services\MatchExportService;
 use App\Services\MatchImportService;
 use Illuminate\Http\Request;
@@ -98,12 +98,21 @@ Route::middleware(['auth', 'verified'])
         })->name('matches.import');
     });
 
+// User Switch Stop route (must be outside admin middleware to work when switched to non-admin user)
+Route::post('admin/user-switch-stop', [\App\Http\Controllers\Admin\UserSwitchController::class, 'stop'])
+    ->middleware(['auth'])
+    ->name('admin.user-switch.stop');
+
 Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
     ->prefix('admin')
     ->as('admin.')
     ->group(function () {
         Volt::route('admin/users', 'admin.users.index')->name('users.index');
         Volt::route('admin/roles', 'admin.roles.index')->name('roles.index');
+
+        // User Switch routes
+        Volt::route('admin/user-switch', 'admin.user-switch.index')->name('user-switch.index');
+        Route::post('admin/user-switch/{user}', [\App\Http\Controllers\Admin\UserSwitchController::class, 'switch'])->name('user-switch.switch');
 
         Volt::route('admin/matches', 'admin.matches.index')->name('matches.index');
         Volt::route('admin/matches/{match}', 'admin.matches.show')

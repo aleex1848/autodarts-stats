@@ -71,6 +71,15 @@
                         </flux:navlist.item>
 
                         <flux:navlist.item
+                            icon="arrows-right-left"
+                            :href="route('admin.user-switch.index')"
+                            :current="request()->routeIs('admin.user-switch.*')"
+                            wire:navigate
+                        >
+                            {{ __('User-Switch') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
                             icon="arrow-down-tray"
                             :href="route('admin.downloads.index')"
                             :current="request()->routeIs('admin.downloads.*') || request()->routeIs('admin.download-categories.*')"
@@ -93,6 +102,27 @@
                 {{ __('Documentation') }}
                 </flux:navlist.item>
             </flux:navlist>
+
+            <!-- User Switch Mode Warning -->
+            @if(session()->has('original_user_id'))
+                <div class="mx-2 mb-3 rounded-lg border border-amber-500 bg-amber-100 p-3 dark:border-amber-600 dark:bg-amber-900/50">
+                    <div class="mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span class="text-sm font-semibold text-amber-800 dark:text-amber-200">{{ __('Switch-Modus aktiv') }}</span>
+                    </div>
+                    <p class="mb-2 text-xs text-amber-700 dark:text-amber-300">
+                        {{ __('Eingeloggt als:') }} <strong>{{ auth()->user()->name }}</strong>
+                    </p>
+                    <form method="POST" action="{{ route('admin.user-switch.stop') }}">
+                        @csrf
+                        <flux:button type="submit" size="xs" variant="danger" class="w-full">
+                            {{ __('Switch beenden') }}
+                        </flux:button>
+                    </form>
+                </div>
+            @endif
 
             <!-- Desktop User Menu -->
             <flux:dropdown class="hidden lg:block" position="bottom" align="start">
@@ -144,6 +174,16 @@
         <!-- Mobile User Menu -->
         <flux:header class="lg:hidden">
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+
+            <!-- User Switch Mode Warning (Mobile) -->
+            @if(session()->has('original_user_id'))
+                <div class="flex items-center gap-2 rounded-lg bg-amber-100 px-2 py-1 dark:bg-amber-900/50">
+                    <svg class="h-4 w-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span class="text-xs font-semibold text-amber-800 dark:text-amber-200">{{ __('Switch-Modus') }}</span>
+                </div>
+            @endif
 
             <flux:spacer />
 
