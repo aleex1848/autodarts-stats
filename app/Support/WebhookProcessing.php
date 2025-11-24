@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\BullOff;
 use App\Models\DartMatch;
 use App\Models\DartThrow;
 use App\Models\Leg;
@@ -36,6 +37,17 @@ class WebhookProcessing extends ProcessWebhookJob
         $payload = $this->webhookCall->payload;
         $data = $payload['data'];
 
+        // Prüfe ob bereits ein match_state Event für dieses Match existiert
+        // Wenn ja, ignorieren wir throw Events, da alle Daten bereits aus match_state kommen
+        if ($this->matchStateEventExists($payload['matchId'])) {
+            Log::debug('throw event ignored - match_state event exists', [
+                'matchId' => $payload['matchId'],
+                'player' => $data['playerName'],
+            ]);
+
+            return;
+        }
+
         DB::transaction(function () use ($payload, $data) {
             // Get or create match first to access player mapping
             $match = $this->firstOrCreateWithRetry(
@@ -57,6 +69,43 @@ class WebhookProcessing extends ProcessWebhookJob
                 $data['playerName'],
                 []
             );
+
+            // Check if this is a Bull-Off throw (negative score in round 1, leg 1, set 1, before any normal turns)
+            $isBullOff = $this->isBullOffThrow($match, $data);
+
+            if ($isBullOff) {
+                // Check if this turn was already created as a regular Turn (should be converted to Bull-Off)
+                $existingTurn = Turn::where('autodarts_turn_id', $data['turnId'])->first();
+                if ($existingTurn) {
+                    // Delete the existing Turn - it should be a Bull-Off instead
+                    $existingTurn->delete();
+                    Log::debug('Converted existing Turn to Bull-Off', [
+                        'matchId' => $payload['matchId'],
+                        'turnId' => $data['turnId'],
+                        'player' => $data['playerName'],
+                    ]);
+                }
+
+                // Store as Bull-Off instead of a Turn
+                $this->firstOrCreateWithRetry(
+                    BullOff::class,
+                    ['autodarts_turn_id' => $data['turnId']],
+                    [
+                        'match_id' => $match->id,
+                        'player_id' => $player->id,
+                        'score' => $data['score'],
+                        'thrown_at' => $data['throw']['createdAt'] ?? now(),
+                    ]
+                );
+
+                Log::debug('bull-off throw processed', [
+                    'matchId' => $payload['matchId'],
+                    'player' => $data['playerName'],
+                    'score' => $data['score'],
+                ]);
+
+                return;
+            }
 
             // Get or create leg with deadlock retry
             $leg = $this->firstOrCreateWithRetry(
@@ -148,9 +197,12 @@ class WebhookProcessing extends ProcessWebhookJob
                 // Get statistics from webhook if available
                 $matchStats = $matchData['stats'][$index]['matchStats'] ?? null;
                 $matchAverage = null;
+                $averageUntil170 = null;
+                $first9Average = null;
                 $checkoutRate = null;
                 $checkoutAttempts = null;
                 $checkoutHits = null;
+                $bestCheckoutPoints = null;
                 $total180s = null;
                 $dartsThrown = null;
 
@@ -158,12 +210,21 @@ class WebhookProcessing extends ProcessWebhookJob
                     // Average is already calculated by Autodarts
                     $matchAverage = isset($matchStats['average']) ? round((float) $matchStats['average'], 2) : null;
 
+                    // Average until 170
+                    $averageUntil170 = isset($matchStats['averageUntil170']) ? round((float) $matchStats['averageUntil170'], 2) : null;
+
+                    // First 9 Average
+                    $first9Average = isset($matchStats['first9Average']) ? round((float) $matchStats['first9Average'], 2) : null;
+
                     // Checkout rate is already calculated by Autodarts (as decimal between 0 and 1)
                     $checkoutRate = isset($matchStats['checkoutPercent']) ? round((float) $matchStats['checkoutPercent'], 4) : null;
 
                     // Checkout attempts and hits
                     $checkoutAttempts = isset($matchStats['checkouts']) ? (int) $matchStats['checkouts'] : null;
                     $checkoutHits = isset($matchStats['checkoutsHit']) ? (int) $matchStats['checkoutsHit'] : null;
+
+                    // Best checkout points
+                    $bestCheckoutPoints = isset($matchStats['checkoutPoints']) ? (int) $matchStats['checkoutPoints'] : null;
 
                     // Total 180s
                     $total180s = isset($matchStats['total180']) ? (int) $matchStats['total180'] : null;
@@ -178,9 +239,12 @@ class WebhookProcessing extends ProcessWebhookJob
                     'legs_won' => $matchData['scores'][$index]['legs'] ?? 0,
                     'sets_won' => $matchData['scores'][$index]['sets'] ?? 0,
                     'match_average' => $matchAverage,
+                    'average_until_170' => $averageUntil170,
+                    'first_9_average' => $first9Average,
                     'checkout_rate' => $checkoutRate,
                     'checkout_attempts' => $checkoutAttempts,
                     'checkout_hits' => $checkoutHits,
+                    'best_checkout_points' => $bestCheckoutPoints,
                     'total_180s' => $total180s ?? 0,
                     'darts_thrown' => $dartsThrown,
                 ]);
@@ -287,19 +351,83 @@ class WebhookProcessing extends ProcessWebhookJob
                 continue;
             }
 
+            // Find player data from matchData to get name and userId
+            $playerDataFromMatch = null;
+            $playerName = null;
+            foreach ($matchData['players'] as $playerData) {
+                if (($playerData['id'] ?? null) === $playerId) {
+                    $playerDataFromMatch = $playerData;
+                    $playerName = $playerData['name'] ?? null;
+                    break;
+                }
+            }
+
+            // Get userId from mapping or generate for bots
             $userId = $playerIdToUserIdMap[$playerId] ?? null;
             if (! $userId) {
-                // Fallback: try to find player by playerId (for backwards compatibility)
-                $player = Player::where('autodarts_user_id', $playerId)->first();
-                if (! $player) {
-                    continue;
+                // Bot or guest without userId - generate deterministic UUID based on name
+                if ($playerName) {
+                    $userId = $this->generateBotUuid($playerName);
+                } else {
+                    // Fallback: try to find player by playerId (for backwards compatibility)
+                    $existingPlayer = Player::where('autodarts_user_id', $playerId)->first();
+                    if ($existingPlayer) {
+                        $userId = $existingPlayer->autodarts_user_id;
+                    } else {
+                        // If we can't find the player and don't have a name, skip this turn
+                        continue;
+                    }
                 }
-            } else {
-                // Find player by the unique userId
-                $player = Player::where('autodarts_user_id', $userId)->first();
-                if (! $player) {
-                    continue;
+            }
+
+            // Find or create player by the unique userId
+            $player = $this->findOrCreatePlayer(
+                $userId,
+                $playerName ?? 'Unknown Player',
+                $playerDataFromMatch ? [
+                    'email' => $playerDataFromMatch['user']['userSettings']['email'] ?? null,
+                    'country' => $playerDataFromMatch['user']['country'] ?? null,
+                    'avatar_url' => $playerDataFromMatch['avatarUrl'] ?? null,
+                ] : []
+            );
+
+            // Check if this is a Bull-Off turn (only if throws are present, otherwise check after throws are added)
+            $score = $turnData['score'] ?? null;
+            $throws = $turnData['throws'] ?? [];
+            $isBullOff = ! empty($throws) && $this->isBullOffTurnFromMatchState($match, $turnData, $matchData);
+
+            if ($isBullOff) {
+                // Check if this turn was already created as a regular Turn (should be converted to Bull-Off)
+                $existingTurn = Turn::where('autodarts_turn_id', $turnData['id'])->first();
+                if ($existingTurn) {
+                    // Delete the existing Turn - it should be a Bull-Off instead
+                    $existingTurn->delete();
+                    Log::debug('Converted existing Turn to Bull-Off', [
+                        'matchId' => $match->autodarts_match_id,
+                        'turnId' => $turnData['id'],
+                        'player' => $player->name,
+                    ]);
                 }
+
+                // Store as Bull-Off instead of a Turn
+                $this->firstOrCreateWithRetry(
+                    BullOff::class,
+                    ['autodarts_turn_id' => $turnData['id']],
+                    [
+                        'match_id' => $match->id,
+                        'player_id' => $player->id,
+                        'score' => $score,
+                        'thrown_at' => $this->parseTimestamp($turnData['createdAt'] ?? null) ?? now(),
+                    ]
+                );
+
+                // Process throws for Bull-Off (if needed for display)
+                if (isset($turnData['throws']) && is_array($turnData['throws'])) {
+                    // Store throws in a separate table or skip them for Bull-Off
+                    // For now, we'll skip storing throws for Bull-Off as they're not part of the game
+                }
+
+                continue;
             }
 
             // Check if turn already exists - if so, use its existing leg
@@ -348,12 +476,30 @@ class WebhookProcessing extends ProcessWebhookJob
 
                 $turn = $existingTurn;
             } else {
-                // Turn doesn't exist - create it for the current leg
+                // Turn doesn't exist - use the current leg from matchData
+                // IMPORTANT: Always use the leg from matchData, not from existing turns
+                // because match_state events contain turns from the current leg only
                 $currentLegNumber = $matchData['leg'] ?? 1;
+                $currentSetNumber = $matchData['set'] ?? 1;
 
+                // Find or create the leg for the current leg number
                 $leg = Leg::where('match_id', $match->id)
                     ->where('leg_number', $currentLegNumber)
+                    ->where('set_number', $currentSetNumber)
                     ->first();
+
+                // If leg doesn't exist, create it
+                if (! $leg) {
+                    $leg = $this->firstOrCreateWithRetry(
+                        Leg::class,
+                        [
+                            'match_id' => $match->id,
+                            'leg_number' => $currentLegNumber,
+                            'set_number' => $currentSetNumber,
+                        ],
+                        ['started_at' => $this->parseTimestamp($turnData['createdAt'] ?? null) ?? now()]
+                    );
+                }
 
                 if (! $leg) {
                     continue;
@@ -392,6 +538,41 @@ class WebhookProcessing extends ProcessWebhookJob
             if (isset($turnData['throws']) && is_array($turnData['throws'])) {
                 $this->syncThrowsForTurn($turn, $turnData['throws']);
             }
+
+            // After processing throws (or if throws are already present), check if this turn should be a Bull-Off
+            // This check runs for both new and existing turns
+            if (isset($turnData['throws']) && ! empty($turnData['throws'])) {
+                $isBullOffAfterThrows = $this->isBullOffTurnFromMatchState($match, $turnData, $matchData);
+                if ($isBullOffAfterThrows) {
+                    // Check if this turn is already a Bull-Off
+                    $existingBullOff = BullOff::where('autodarts_turn_id', $turnData['id'])->first();
+                    if (! $existingBullOff) {
+                        // Convert Turn to Bull-Off
+                        // First, delete any throws associated with this turn
+                        $turn->throws()->delete();
+                        // Then delete the turn
+                        $turn->delete();
+                        // Create Bull-Off
+                        $this->firstOrCreateWithRetry(
+                            BullOff::class,
+                            ['autodarts_turn_id' => $turnData['id']],
+                            [
+                                'match_id' => $match->id,
+                                'player_id' => $player->id,
+                                'score' => $turnData['score'] ?? null,
+                                'thrown_at' => $this->parseTimestamp($turnData['createdAt'] ?? null) ?? now(),
+                            ]
+                        );
+                        Log::debug('Converted Turn to Bull-Off after throws were added', [
+                            'matchId' => $match->autodarts_match_id,
+                            'turnId' => $turnData['id'],
+                            'player' => $player->name,
+                        ]);
+
+                        continue; // Skip to next turn
+                    }
+                }
+            }
         }
     }
 
@@ -402,14 +583,42 @@ class WebhookProcessing extends ProcessWebhookJob
 
         foreach ($throwsData as $throwData) {
             $throwId = $throwData['id'];
+            $dartNumber = $throwData['throw'];
+            $segmentNumber = $throwData['segment']['number'] ?? null;
+            $multiplier = $throwData['segment']['multiplier'] ?? 1;
 
-            // If throw already exists with same ID, no correction needed
-            if ($existingThrows->has($throwId)) {
+            // Check if throw already exists with same ID
+            $existingThrowWithSameId = $existingThrows->get($throwId);
+
+            if ($existingThrowWithSameId) {
+                // Check if the throw data has changed (correction detected)
+                $hasChanged = $existingThrowWithSameId->segment_number !== $segmentNumber
+                    || $existingThrowWithSameId->multiplier !== $multiplier;
+
+                if ($hasChanged) {
+                    // Mark old throw as corrected
+                    $existingThrowWithSameId->update([
+                        'is_corrected' => true,
+                        'corrected_at' => now(),
+                    ]);
+
+                    // Create new throw with updated data
+                    // Note: createThrowWithRetry will create a new throw since the old one is now marked as corrected
+                    $newThrow = $this->createThrowWithRetry($turn, $throwId, $throwData, $dartNumber);
+
+                    // Link correction
+                    if ($newThrow && $newThrow->id !== $existingThrowWithSameId->id) {
+                        $existingThrowWithSameId->update([
+                            'corrected_by_throw_id' => $newThrow->id,
+                        ]);
+                    }
+                }
+
+                // If no change, continue to next throw
                 continue;
             }
 
-            // Check if this dart_number position already has a throw
-            $dartNumber = $throwData['throw'];
+            // Check if this dart_number position already has a throw (different throw ID)
             $existingThrowAtPosition = $turn->throws()
                 ->notCorrected()
                 ->where('dart_number', $dartNumber)
@@ -440,8 +649,11 @@ class WebhookProcessing extends ProcessWebhookJob
         $attempts = 0;
 
         while ($attempts < $maxAttempts) {
-            // First, check if throw already exists (might have been created by another process)
-            $existing = DartThrow::where('autodarts_throw_id', $throwId)->first();
+            // First, check if throw already exists and is not corrected (might have been created by another process)
+            // Only return existing throw if it's not corrected, otherwise create a new one
+            $existing = DartThrow::where('autodarts_throw_id', $throwId)
+                ->where('is_corrected', false)
+                ->first();
             if ($existing) {
                 return $existing;
             }
@@ -989,10 +1201,13 @@ class WebhookProcessing extends ProcessWebhookJob
             }
 
             $average = isset($legStats['average']) ? round((float) $legStats['average'], 2) : null;
+            $averageUntil170 = isset($legStats['averageUntil170']) ? round((float) $legStats['averageUntil170'], 2) : null;
+            $first9Average = isset($legStats['first9Average']) ? round((float) $legStats['first9Average'], 2) : null;
             $checkoutRate = isset($legStats['checkoutPercent']) ? round((float) $legStats['checkoutPercent'], 4) : null;
             $dartsThrown = isset($legStats['dartsThrown']) ? (int) $legStats['dartsThrown'] : null;
             $checkoutAttempts = isset($legStats['checkouts']) ? (int) $legStats['checkouts'] : null;
             $checkoutHits = isset($legStats['checkoutsHit']) ? (int) $legStats['checkoutsHit'] : null;
+            $bestCheckoutPoints = isset($legStats['checkoutPoints']) ? (int) $legStats['checkoutPoints'] : null;
 
             // Update or create leg_player record
             DB::table('leg_player')->updateOrInsert(
@@ -1002,10 +1217,13 @@ class WebhookProcessing extends ProcessWebhookJob
                 ],
                 [
                     'average' => $average,
+                    'average_until_170' => $averageUntil170,
+                    'first_9_average' => $first9Average,
                     'checkout_rate' => $checkoutRate,
                     'darts_thrown' => $dartsThrown,
                     'checkout_attempts' => $checkoutAttempts,
                     'checkout_hits' => $checkoutHits,
+                    'best_checkout_points' => $bestCheckoutPoints,
                     'updated_at' => now(),
                     'created_at' => DB::raw('COALESCE(created_at, NOW())'),
                 ]
@@ -1138,6 +1356,232 @@ class WebhookProcessing extends ProcessWebhookJob
     }
 
     /**
+     * Check if a turn from match_state is a Bull-Off turn
+     */
+    protected function isBullOffTurnFromMatchState(DartMatch $match, array $turnData, array $matchData): bool
+    {
+        // First, check if Bull-Off is enabled for this match
+        // Bull-Off is enabled if gameScores contains negative values or stats.bullDistance exists
+        $gameScores = $matchData['gameScores'] ?? [];
+        $stats = $matchData['stats'] ?? [];
+        $hasBullOffEnabled = false;
+
+        // Check if gameScores has negative values (indicates Bull-Off)
+        foreach ($gameScores as $score) {
+            if ($score < 0) {
+                $hasBullOffEnabled = true;
+                break;
+            }
+        }
+
+        // Also check if stats.bullDistance exists (another indicator)
+        if (! $hasBullOffEnabled && ! empty($stats)) {
+            foreach ($stats as $stat) {
+                $bullDistance = $stat['legStats']['bullDistance'] ?? $stat['matchStats']['bullDistance'] ?? null;
+                if ($bullDistance !== null) {
+                    $hasBullOffEnabled = true;
+                    break;
+                }
+            }
+        }
+
+        // If Bull-Off is not enabled, this cannot be a Bull-Off turn
+        if (! $hasBullOffEnabled) {
+            return false;
+        }
+
+        // Must be round 1, leg 1, set 1
+        if (($matchData['leg'] ?? 1) !== 1 || ($matchData['set'] ?? 1) !== 1 || ($turnData['round'] ?? 1) !== 1) {
+            return false;
+        }
+
+        // Check if this is a Bull-Off turn
+        // Bull-Off can be:
+        // 1. All throws on bull (25) - hit
+        // 2. Negative score - miss (threw beside bull)
+        $throws = $turnData['throws'] ?? [];
+        $score = $turnData['score'] ?? null;
+
+        // Check if all throws are on bull
+        $allOnBull = true;
+        if (! empty($throws)) {
+            foreach ($throws as $throw) {
+                $segmentNumber = $throw['segment']['number'] ?? null;
+                if ($segmentNumber !== 25) {
+                    $allOnBull = false;
+                    break;
+                }
+            }
+        } else {
+            $allOnBull = false;
+        }
+
+        // If not all throws on bull, check if score is negative (miss)
+        // Negative score indicates a miss during Bull-Off
+        $isMiss = $score !== null && $score < 0;
+
+        // Must be either all throws on bull OR a miss (negative score)
+        if (! $allOnBull && ! $isMiss) {
+            return false;
+        }
+
+        // If no throws and no negative score, this is not a Bull-Off
+        if (empty($throws) && ! $isMiss) {
+            return false;
+        }
+
+        // Check if there are any normal turns (with positive or zero score) in rounds > 1
+        // Turns in round > 1 are definitely not Bull-Offs
+        // Exclude the current turn if it already exists as a Turn
+        // Note: We only check for turns in round > 1, because turns in round 1 might be Bull-Offs
+        // If there are turns in round > 1, then this turn in round 1 cannot be a Bull-Off
+        $hasNormalTurnsInLaterRounds = Turn::query()
+            ->join('legs', 'turns.leg_id', '=', 'legs.id')
+            ->where('legs.match_id', $match->id)
+            ->where('turns.points', '>=', 0)
+            ->where('turns.round_number', '>', 1)
+            ->where('turns.autodarts_turn_id', '!=', $turnData['id'] ?? '')
+            ->exists();
+
+        if ($hasNormalTurnsInLaterRounds) {
+            return false;
+        }
+
+        // Additional check: Count how many Bull-Off throws already exist for this match
+        // But allow if this turn is already a Bull-Off (to handle reprocessing)
+        $existingBullOffs = BullOff::where('match_id', $match->id)
+            ->where('autodarts_turn_id', '!=', $turnData['id'] ?? '')
+            ->count();
+        if ($existingBullOffs >= 2) {
+            return false;
+        }
+
+        // Bull-Off can have positive scores (25 for single bull, 50 for double bull)
+        // or negative scores (miss). The key is: round 1, leg 1, set 1, all throws on bull, no normal turns yet
+        return true;
+    }
+
+    /**
+     * Check if a throw is a Bull-Off throw
+     * Bull-Off occurs before the game starts, both players throw once at bull
+     * Criteria: round 1, leg 1, set 1, throw on bull (25), and no normal turns exist yet
+     * Score can be positive (25 for single bull, 50 for double bull) or negative (miss)
+     * Note: For throw events, we need to check match_state webhooks to determine if Bull-Off is enabled
+     */
+    protected function isBullOffThrow(DartMatch $match, array $data): bool
+    {
+        // Check if Bull-Off is enabled by looking at match_state webhooks
+        // Bull-Off is enabled if gameScores contains negative values or stats.bullDistance exists
+        $hasBullOffEnabled = $this->isBullOffEnabledForMatch($match);
+
+        // If Bull-Off is not enabled, this cannot be a Bull-Off throw
+        if (! $hasBullOffEnabled) {
+            return false;
+        }
+
+        // Must be round 1, leg 1, set 1
+        if (($data['leg'] ?? 1) !== 1 || ($data['set'] ?? 1) !== 1 || ($data['round'] ?? 1) !== 1) {
+            return false;
+        }
+
+        // Check if the throw is on bull (25) - Bull-Off is always on bull
+        $throwSegment = $data['throw']['segment'] ?? [];
+        $segmentNumber = $throwSegment['number'] ?? null;
+        if ($segmentNumber !== 25) {
+            return false;
+        }
+
+        // Check if there are any normal turns (with positive or zero score) in this match
+        // Exclude the current turn if it already exists as a Turn
+        // If yes, this is not a Bull-Off (it's a Bull-Out during the game)
+        $hasNormalTurns = Turn::query()
+            ->join('legs', 'turns.leg_id', '=', 'legs.id')
+            ->where('legs.match_id', $match->id)
+            ->where('turns.points', '>=', 0)
+            ->where('turns.autodarts_turn_id', '!=', $data['turnId'] ?? '')
+            ->exists();
+
+        // If normal turns exist, this is not a Bull-Off
+        if ($hasNormalTurns) {
+            return false;
+        }
+
+        // Additional check: Count how many Bull-Off throws already exist for this match
+        // Bull-Off should only have 2 throws (one per player)
+        $existingBullOffs = BullOff::where('match_id', $match->id)->count();
+        if ($existingBullOffs >= 2) {
+            // Already have 2 Bull-Off throws, this must be something else
+            return false;
+        }
+
+        // Bull-Off can have positive scores (25 for single bull, 50 for double bull)
+        // or negative scores (miss). The key is: round 1, leg 1, set 1, throw on bull, no normal turns yet
+        return true;
+    }
+
+    /**
+     * Check if Bull-Off is enabled for a match by checking match_state webhooks
+     */
+    protected function isBullOffEnabledForMatch(DartMatch $match): bool
+    {
+        // Find a match_state webhook for this match
+        $webhookCall = WebhookCall::whereRaw(
+            "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.matchId')) = ?",
+            [$match->autodarts_match_id]
+        )
+            ->whereRaw(
+                "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.event')) = 'match_state'"
+            )
+            ->orderBy('created_at')
+            ->first();
+
+        if (! $webhookCall) {
+            return false;
+        }
+
+        $matchData = $webhookCall->payload['data']['match'] ?? [];
+        $gameScores = $matchData['gameScores'] ?? [];
+        $stats = $matchData['stats'] ?? [];
+
+        // Check if gameScores has negative values (indicates Bull-Off)
+        foreach ($gameScores as $score) {
+            if ($score < 0) {
+                return true;
+            }
+        }
+
+        // Also check if stats.bullDistance exists (another indicator)
+        if (! empty($stats)) {
+            foreach ($stats as $stat) {
+                $bullDistance = $stat['legStats']['bullDistance'] ?? $stat['matchStats']['bullDistance'] ?? null;
+                if ($bullDistance !== null) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a match_state event exists for the given matchId
+     */
+    protected function matchStateEventExists(string $matchId): bool
+    {
+        // Use database-agnostic approach by loading all match_state webhooks and filtering in PHP
+        $matchStateWebhooks = \Spatie\WebhookClient\Models\WebhookCall::whereNotNull('payload')
+            ->get()
+            ->filter(function ($webhook) use ($matchId) {
+                $payload = $webhook->payload;
+
+                return ($payload['event'] ?? null) === 'match_state'
+                    && ($payload['matchId'] ?? null) === $matchId;
+            });
+
+        return $matchStateWebhooks->isNotEmpty();
+    }
+
+    /**
      * Find the unique userId from a playerId (spiel-spezifische ID) by looking up in match_state webhook
      */
     protected function findUserIdFromPlayerId(string $matchId, string $playerId, string $playerName): string
@@ -1180,7 +1624,10 @@ class WebhookProcessing extends ProcessWebhookJob
             return $existingPlayer->autodarts_user_id;
         }
 
-        // Last resort: generate bot UUID based on name
-        return $this->generateBotUuid($playerName);
+        // Last resort: if no match_state exists and no player found, use playerId as userId
+        // This allows throw events to work when match_state events are disabled
+        // Note: This means playerId (spiel-spezifische ID) will be used as autodarts_user_id
+        // which is not ideal, but necessary for backwards compatibility when only throw events are enabled
+        return $playerId;
     }
 }

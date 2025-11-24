@@ -8,6 +8,23 @@
     
     // Hole alle Spieler aus dem Match (sortiert nach player_index)
     $players = $leg->match->players->sortBy('pivot.player_index')->values();
+    
+    // Hilfsfunktion zum Formatieren von Wurf-Labels
+    $formatThrowLabel = function ($throw) {
+        if ($throw->multiplier == 0 || $throw->segment_number == 0) {
+            return 'Miss';
+        } elseif ($throw->multiplier == 3) {
+            return 'T' . $throw->segment_number;
+        } elseif ($throw->multiplier == 2) {
+            return 'D' . $throw->segment_number;
+        } elseif ($throw->segment_number == 25 && $throw->multiplier == 2) {
+            return 'Bull';
+        } elseif ($throw->segment_number == 25 && $throw->multiplier == 1) {
+            return '25';
+        } else {
+            return 'S' . $throw->segment_number;
+        }
+    };
 @endphp
 
 <div 
@@ -67,43 +84,88 @@
                                         @if ($turn)
                                             <!-- Punkte mit diagonaler Durchstreichung bei BUST -->
                                             <div class="relative inline-block">
-                                                <div class="font-mono text-5xl font-bold tracking-tight {{ $turn->busted ? 'text-slate-400' : 'text-slate-100' }}">
-                                                    {{ $turn->points }}
-                                                </div>
                                                 @if ($turn->busted)
-                                                    <!-- Diagonale Durchstreichung -->
-                                                    <div class="absolute inset-0 flex items-center justify-center">
-                                                        <div class="h-0.5 w-full origin-center rotate-[25deg] bg-slate-400"></div>
+                                                    <!-- BUST Anzeige -->
+                                                    <div class="font-mono text-4xl font-bold tracking-tight text-red-500 dark:text-red-400">
+                                                        BUST
+                                                    </div>
+                                                    <div class="mt-1 text-xs font-semibold text-slate-400">
+                                                        {{ $turn->points }} Punkte
+                                                    </div>
+                                                @else
+                                                    <!-- Normale Punkte-Anzeige -->
+                                                    <div class="font-mono text-5xl font-bold tracking-tight text-slate-100">
+                                                        {{ $turn->points }}
                                                     </div>
                                                 @endif
                                             </div>
 
                                             <!-- Einzelne Dart-Würfe (klein und dezent) -->
-                                            @if ($turn->throws->isNotEmpty())
+                                            @php
+                                                // Alle Würfe anzeigen (auch korrigierte)
+                                                $allThrows = $turn->throws;
+                                                
+                                                // Für jeden dart_number: finde den aktuellen Wurf (nicht korrigiert) und prüfe auf korrigierte Vorgänger
+                                                $displayThrows = $allThrows
+                                                    ->groupBy('dart_number')
+                                                    ->map(function ($throws) {
+                                                        // Finde den aktuellen Wurf (nicht korrigiert, neuester)
+                                                        $currentThrow = $throws
+                                                            ->where('is_corrected', false)
+                                                            ->sortByDesc('id')
+                                                            ->first();
+                                                        
+                                                        // Falls kein nicht-korrigierter Wurf existiert, nimm den neuesten (auch wenn korrigiert)
+                                                        if (!$currentThrow) {
+                                                            $currentThrow = $throws->sortByDesc('id')->first();
+                                                        }
+                                                        
+                                                        // Finde den neuesten korrigierten Wurf (falls vorhanden)
+                                                        $correctedThrow = $throws
+                                                            ->where('is_corrected', true)
+                                                            ->where('id', '!=', $currentThrow->id)
+                                                            ->sortByDesc('id')
+                                                            ->first();
+                                                        
+                                                        return [
+                                                            'throw' => $currentThrow,
+                                                            'has_correction' => $correctedThrow !== null,
+                                                            'corrected_throw' => $correctedThrow,
+                                                        ];
+                                                    })
+                                                    ->sortBy(function ($item) {
+                                                        return $item['throw']->dart_number;
+                                                    })
+                                                    ->values();
+                                            @endphp
+                                            @if ($displayThrows->isNotEmpty())
                                                 <div class="mt-1 flex flex-wrap justify-center gap-1 text-xs text-slate-400">
-                                                    @foreach ($turn->throws->sortBy('dart_number') as $throw)
+                                                    @foreach ($displayThrows as $item)
                                                         @php
-                                                            $throwLabel = '';
+                                                            $throw = $item['throw'];
+                                                            $hasCorrection = $item['has_correction'];
+                                                            $correctedThrow = $item['corrected_throw'];
                                                             
-                                                            // Formatiere den Wurf (z.B. T20, D16, S5)
-                                                            if ($throw->multiplier == 3) {
-                                                                $throwLabel = 'T' . $throw->segment_number;
-                                                            } elseif ($throw->multiplier == 2) {
-                                                                $throwLabel = 'D' . $throw->segment_number;
-                                                            } elseif ($throw->segment_number == 25 && $throw->multiplier == 2) {
-                                                                $throwLabel = 'Bull';
-                                                            } elseif ($throw->segment_number == 25 && $throw->multiplier == 1) {
-                                                                $throwLabel = '25';
-                                                            } elseif ($throw->segment_number == 0) {
-                                                                $throwLabel = 'Miss';
-                                                            } else {
-                                                                $throwLabel = 'S' . $throw->segment_number;
-                                                            }
+                                                            $throwLabel = $formatThrowLabel($throw);
+                                                            $correctedLabel = $hasCorrection && $correctedThrow ? $formatThrowLabel($correctedThrow) : '';
                                                         @endphp
                                                         
-                                                        <span class="font-mono">{{ $throwLabel }}</span>
+                                                        <span class="inline-flex items-center gap-1">
+                                                            @if ($hasCorrection && $correctedThrow)
+                                                                <!-- Zeige zuerst den korrigierten Wurf (durchgestrichen) -->
+                                                                <span class="font-mono line-through text-slate-500 dark:text-slate-500" title="{{ __('Korrigiert: :label', ['label' => $correctedLabel]) }}">
+                                                                    {{ $correctedLabel }}
+                                                                </span>
+                                                                <!-- Dann den Pfeil -->
+                                                                <span class="text-slate-500">→</span>
+                                                            @endif
+                                                            <!-- Der aktuelle/korrigierte Wurf -->
+                                                            <span class="font-mono {{ $hasCorrection ? 'text-amber-400 dark:text-amber-300' : '' }}" title="{{ $hasCorrection ? __('Korrigiert') : '' }}">
+                                                                {{ $throwLabel }}
+                                                            </span>
+                                                        </span>
                                                         @if (!$loop->last)
-                                                            <span>·</span>
+                                                            <span class="mx-1">·</span>
                                                         @endif
                                                     @endforeach
                                                 </div>

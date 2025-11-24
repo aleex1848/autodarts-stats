@@ -97,10 +97,12 @@
                         <dt class="font-medium text-zinc-500">{{ __('Out-Mode') }}</dt>
                         <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->out_mode ?? '—' }}</dd>
                     </div>
-                    <div class="flex justify-between">
-                        <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
-                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
-                    </div>
+                    @if ($match->bullOffs->isNotEmpty())
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
+                        </div>
+                    @endif
                     <div class="flex justify-between">
                         <dt class="font-medium text-zinc-500">{{ __('Max. Runden') }}</dt>
                         <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->max_rounds ?? '—' }}</dd>
@@ -128,6 +130,9 @@
                         <th class="px-4 py-3 text-left">{{ __('Sets') }}</th>
                         @if ($match->variant === 'X01')
                             <th class="px-4 py-3 text-left">{{ __('Average') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('Avg. bis 170') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('First 9 Avg.') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('Best Checkout') }}</th>
                             <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
                             <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
                             <th class="px-4 py-3 text-left">{{ __('BUST') }}</th>
@@ -160,6 +165,27 @@
                                 <td class="px-4 py-3">
                                     @if (! is_null($player->pivot->match_average))
                                         {{ number_format((float) $player->pivot->match_average, 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->average_until_170))
+                                        {{ number_format((float) $player->pivot->average_until_170, 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->first_9_average))
+                                        {{ number_format((float) $player->pivot->first_9_average, 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->best_checkout_points))
+                                        {{ $player->pivot->best_checkout_points }}
                                     @else
                                         —
                                     @endif
@@ -210,7 +236,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $match->variant === 'X01' ? 9 : 5 }}" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                            <td colspan="{{ $match->variant === 'X01' ? 12 : 5 }}" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                                 {{ __('Keine Spieler vorhanden.') }}
                             </td>
                         </tr>
@@ -219,6 +245,47 @@
             </table>
         </div>
     </div>
+
+    <!-- Bull-Off Anzeige -->
+    @if ($match->bullOffs->isNotEmpty())
+        <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <flux:heading size="md">{{ __('Bull-Off') }}</flux:heading>
+            <flux:subheading>
+                {{ __('Beide Spieler werfen einmal auf Bull, um zu bestimmen, wer das Spiel beginnt.') }}
+            </flux:subheading>
+
+            <div class="mt-4 grid grid-cols-2 gap-4">
+                @foreach ($match->bullOffs->sortBy('thrown_at') as $bullOff)
+                    <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+                        <div class="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                            {{ $bullOff->player->name }}
+                        </div>
+                        <div class="mt-2 text-2xl font-bold {{ $bullOff->score < 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-zinc-100' }}">
+                            {{ abs($bullOff->score) }}
+                        </div>
+                        <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ __('Abstand vom Bull') }}
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            @php
+                // Bestimme den Gewinner (niedrigster Score gewinnt)
+                $winner = $match->bullOffs->sortBy('score')->first();
+            @endphp
+            @if ($winner)
+                <div class="mt-4 rounded-lg bg-emerald-50 p-4 dark:bg-emerald-900/20">
+                    <div class="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                        {{ __('Gewinner: :name', ['name' => $winner->player->name]) }}
+                    </div>
+                    <div class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                        {{ __('Beginnt das Spiel') }}
+                    </div>
+                </div>
+            @endif
+        </div>
+    @endif
 
     <!-- Spielverlauf in voller Breite -->
     <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -258,6 +325,9 @@
                                             <th class="px-4 py-3 text-left">{{ __('Spieler') }}</th>
                                             @if ($match->variant === 'X01')
                                                 <th class="px-4 py-3 text-right">{{ __('Average') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('Avg. bis 170') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('First 9 Avg.') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('Best Checkout') }}</th>
                                                 <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
                                                 <th class="px-4 py-3 text-right">{{ __('Checkout %') }}</th>
                                                 <th class="px-4 py-3 text-right">{{ __('BUST') }}</th>
@@ -276,6 +346,27 @@
                                                     <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
                                                         @if (! is_null($player->pivot->average))
                                                             {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->average_until_170))
+                                                            {{ number_format((float) $player->pivot->average_until_170, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->first_9_average))
+                                                            {{ number_format((float) $player->pivot->first_9_average, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->best_checkout_points))
+                                                            {{ $player->pivot->best_checkout_points }}
                                                         @else
                                                             —
                                                         @endif

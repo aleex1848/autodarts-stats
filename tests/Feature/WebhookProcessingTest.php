@@ -14,42 +14,10 @@ uses(RefreshDatabase::class);
 test('handleThrow creates all necessary records', function () {
     $matchId = '019a8d99-9fd4-7885-a9fe-2139955793c2';
     $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
-    $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
 
-    // First create a match_state webhook so the throw event can find the userId
-    $matchStatePayload = [
-        'event' => 'match_state',
-        'matchId' => $matchId,
-        'variant' => 'X01',
-        'data' => [
-            'match' => [
-                'id' => $matchId,
-                'type' => 'Online',
-                'createdAt' => '2025-11-16T16:57:53.034663222Z',
-                'finished' => false,
-                'settings' => ['baseScore' => 501],
-                'players' => [
-                    [
-                        'id' => $playerId, // Spiel-spezifische ID
-                        'userId' => $userId, // Eindeutige Benutzer-ID
-                        'name' => 'TestPlayer',
-                        'user' => ['country' => 'de'],
-                    ],
-                ],
-                'scores' => [['legs' => 0, 'sets' => 0]],
-                'turns' => [],
-            ],
-        ],
-    ];
-
-    $matchStateWebhook = WebhookCall::create([
-        'name' => 'default',
-        'url' => 'test',
-        'payload' => $matchStatePayload,
-    ]);
-
-    $matchStateJob = new WebhookProcessing($matchStateWebhook);
-    $matchStateJob->handle();
+    // NOTE: We do NOT create a match_state webhook here, because we want to test
+    // that throw events are processed when no match_state exists
+    // The throw event will use the fallback logic (playerId as userId for backwards compatibility)
 
     // Now create the throw event
     $payload = [
@@ -99,7 +67,8 @@ test('handleThrow creates all necessary records', function () {
 
     $player = Player::first();
     expect($player->name)->toBe('TestPlayer');
-    expect($player->autodarts_user_id)->toBe($userId); // Sollte die eindeutige userId sein
+    // When no match_state exists, fallback uses playerId as userId (for backwards compatibility)
+    expect($player->autodarts_user_id)->toBe($playerId);
 
     $throw = DartThrow::first();
     expect($throw->segment_number)->toBe(20);
@@ -234,40 +203,9 @@ test('multiple throw events for same turn accumulate correctly', function () {
     $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
     $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
 
-    // First create a match_state webhook so the throw events can find the userId
-    $matchStatePayload = [
-        'event' => 'match_state',
-        'matchId' => $matchId,
-        'variant' => 'X01',
-        'data' => [
-            'match' => [
-                'id' => $matchId,
-                'type' => 'Online',
-                'createdAt' => '2025-11-16T16:57:53.034663222Z',
-                'finished' => false,
-                'settings' => ['baseScore' => 501],
-                'players' => [
-                    [
-                        'id' => $playerId, // Spiel-spezifische ID
-                        'userId' => $userId, // Eindeutige Benutzer-ID
-                        'name' => 'TestPlayer',
-                        'user' => ['country' => 'de'],
-                    ],
-                ],
-                'scores' => [['legs' => 0, 'sets' => 0]],
-                'turns' => [],
-            ],
-        ],
-    ];
-
-    $matchStateWebhook = WebhookCall::create([
-        'name' => 'default',
-        'url' => 'test',
-        'payload' => $matchStatePayload,
-    ]);
-
-    $matchStateJob = new WebhookProcessing($matchStateWebhook);
-    $matchStateJob->handle();
+    // NOTE: We do NOT create a match_state webhook here, because we want to test
+    // that throw events are processed when no match_state exists
+    // The throw events will use the fallback logic to find/create players
 
     // First throw
     $payload1 = [
@@ -357,40 +295,8 @@ test('handleThrow can handle negative points from Bull-Out', function () {
     $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
     $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
 
-    // First create a match_state webhook so the throw event can find the userId
-    $matchStatePayload = [
-        'event' => 'match_state',
-        'matchId' => $matchId,
-        'variant' => 'X01',
-        'data' => [
-            'match' => [
-                'id' => $matchId,
-                'type' => 'Online',
-                'createdAt' => '2025-11-16T16:57:53.034663222Z',
-                'finished' => false,
-                'settings' => ['baseScore' => 501],
-                'players' => [
-                    [
-                        'id' => $playerId, // Spiel-spezifische ID
-                        'userId' => $userId, // Eindeutige Benutzer-ID
-                        'name' => 'TestPlayer',
-                        'user' => ['country' => 'de'],
-                    ],
-                ],
-                'scores' => [['legs' => 0, 'sets' => 0]],
-                'turns' => [],
-            ],
-        ],
-    ];
-
-    $matchStateWebhook = WebhookCall::create([
-        'name' => 'default',
-        'url' => 'test',
-        'payload' => $matchStatePayload,
-    ]);
-
-    $matchStateJob = new WebhookProcessing($matchStateWebhook);
-    $matchStateJob->handle();
+    // NOTE: We do NOT create a match_state webhook here, because we want to test
+    // that throw events are processed when no match_state exists
 
     $payload = [
         'event' => 'throw',
@@ -402,7 +308,7 @@ test('handleThrow can handle negative points from Bull-Out', function () {
             'playerName' => 'TestPlayer',
             'leg' => 1,
             'set' => 1,
-            'round' => 1,
+            'round' => 2, // Round 2, not round 1, so it's not a Bull-Off
             'score' => -6, // Negative score from Bull-Out miss
             'throw' => [
                 'id' => '019a8d9a-0689-7843-b956-e5bed41dece6',

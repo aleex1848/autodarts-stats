@@ -49,9 +49,12 @@ class DartMatch extends Model
                 'sets_won',
                 'final_position',
                 'match_average',
+                'average_until_170',
+                'first_9_average',
                 'checkout_rate',
                 'checkout_attempts',
                 'checkout_hits',
+                'best_checkout_points',
                 'total_180s',
                 'darts_thrown',
                 'busted_count',
@@ -77,6 +80,11 @@ class DartMatch extends Model
     public function fixture(): HasOne
     {
         return $this->hasOne(MatchdayFixture::class, 'dart_match_id');
+    }
+
+    public function bullOffs(): HasMany
+    {
+        return $this->hasMany(BullOff::class, 'match_id');
     }
 
     public function scopeFinished(Builder $query): void

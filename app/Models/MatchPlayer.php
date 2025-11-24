@@ -21,9 +21,12 @@ class MatchPlayer extends Pivot
         'sets_won',
         'final_position',
         'match_average',
+        'average_until_170',
+        'first_9_average',
         'checkout_rate',
         'checkout_attempts',
         'checkout_hits',
+        'best_checkout_points',
         'total_180s',
         'darts_thrown',
         'busted_count',
@@ -33,6 +36,8 @@ class MatchPlayer extends Pivot
     {
         return [
             'match_average' => 'decimal:2',
+            'average_until_170' => 'decimal:2',
+            'first_9_average' => 'decimal:2',
             'checkout_rate' => 'decimal:4',
         ];
     }

@@ -9,6 +9,8 @@ use App\Models\MatchPlayer;
 use App\Models\Player;
 use App\Models\Turn;
 use App\Models\User;
+use App\Support\LegStatisticsCalculator;
+use App\Support\MatchStatisticsCalculator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\WebhookClient\Models\WebhookCall;
@@ -63,6 +65,16 @@ class MatchImportService
 
             // Import throws (with webhook_call_id mapping)
             $this->importThrows($data['throws'] ?? [], $turnMap, $webhookCallMap);
+
+            // Recalculate statistics based on imported data
+            // This ensures statistics are accurate even if exported data was outdated
+            foreach ($legMap as $legId) {
+                $leg = Leg::find($legId);
+                if ($leg) {
+                    LegStatisticsCalculator::calculateAndUpdate($leg);
+                }
+            }
+            MatchStatisticsCalculator::calculateAndUpdate($match);
 
             Log::info('Match imported successfully', [
                 'match_id' => $match->id,

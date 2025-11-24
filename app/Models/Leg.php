@@ -49,10 +49,13 @@ class Leg extends Model
         return $this->belongsToMany(Player::class, 'leg_player', 'leg_id', 'player_id')
             ->withPivot([
                 'average',
+                'average_until_170',
+                'first_9_average',
                 'checkout_rate',
                 'darts_thrown',
                 'checkout_attempts',
                 'checkout_hits',
+                'best_checkout_points',
                 'busted_count',
             ])
             ->withTimestamps();
