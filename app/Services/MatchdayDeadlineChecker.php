@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\FixtureStatus;
 use App\Models\MatchdayFixture;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class MatchdayDeadlineChecker
 {
@@ -38,7 +37,7 @@ class MatchdayDeadlineChecker
         $homeParticipant = $league->participants()
             ->where('player_id', $fixture->home_player_id)
             ->first();
-            
+
         $awayParticipant = $league->participants()
             ->where('player_id', $fixture->away_player_id)
             ->first();
@@ -52,4 +51,3 @@ class MatchdayDeadlineChecker
         }
     }
 }
-

@@ -32,7 +32,7 @@ class LeagueScheduler
     protected function generateRound(League $league, array $playerIds, bool $isReturnRound): void
     {
         $playerCount = count($playerIds);
-        
+
         // If odd number of players, add a "bye" (null)
         if ($playerCount % 2 !== 0) {
             $playerIds[] = null;
@@ -45,7 +45,7 @@ class LeagueScheduler
         // Round-robin algorithm (Circle method)
         for ($round = 0; $round < $rounds; $round++) {
             $matchdayNumber = $isReturnRound ? $rounds + $round + 1 : $round + 1;
-            
+
             $matchday = Matchday::create([
                 'league_id' => $league->id,
                 'matchday_number' => $matchdayNumber,
@@ -122,13 +122,12 @@ class LeagueScheduler
 
     protected function calculateDeadline(League $league, int $matchdayNumber): ?\DateTime
     {
-        if (!$league->days_per_matchday) {
+        if (! $league->days_per_matchday) {
             return null;
         }
 
         $startDate = $league->registration_deadline ?? now();
-        
+
         return (clone $startDate)->modify("+{$matchdayNumber} weeks");
     }
 }
-

@@ -12,13 +12,53 @@ use Spatie\WebhookClient\Models\WebhookCall;
 uses(RefreshDatabase::class);
 
 test('handleThrow creates all necessary records', function () {
+    $matchId = '019a8d99-9fd4-7885-a9fe-2139955793c2';
+    $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
+    $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
+
+    // First create a match_state webhook so the throw event can find the userId
+    $matchStatePayload = [
+        'event' => 'match_state',
+        'matchId' => $matchId,
+        'variant' => 'X01',
+        'data' => [
+            'match' => [
+                'id' => $matchId,
+                'type' => 'Online',
+                'createdAt' => '2025-11-16T16:57:53.034663222Z',
+                'finished' => false,
+                'settings' => ['baseScore' => 501],
+                'players' => [
+                    [
+                        'id' => $playerId, // Spiel-spezifische ID
+                        'userId' => $userId, // Eindeutige Benutzer-ID
+                        'name' => 'TestPlayer',
+                        'user' => ['country' => 'de'],
+                    ],
+                ],
+                'scores' => [['legs' => 0, 'sets' => 0]],
+                'turns' => [],
+            ],
+        ],
+    ];
+
+    $matchStateWebhook = WebhookCall::create([
+        'name' => 'default',
+        'url' => 'test',
+        'payload' => $matchStatePayload,
+    ]);
+
+    $matchStateJob = new WebhookProcessing($matchStateWebhook);
+    $matchStateJob->handle();
+
+    // Now create the throw event
     $payload = [
         'event' => 'throw',
-        'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+        'matchId' => $matchId,
         'data' => [
-            'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+            'matchId' => $matchId,
             'turnId' => '019a8d99-ae3a-7d85-9a89-af9677e1f49e',
-            'playerId' => '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9',
+            'playerId' => $playerId, // Spiel-spezifische ID
             'playerName' => 'TestPlayer',
             'leg' => 1,
             'set' => 1,
@@ -59,7 +99,7 @@ test('handleThrow creates all necessary records', function () {
 
     $player = Player::first();
     expect($player->name)->toBe('TestPlayer');
-    expect($player->autodarts_user_id)->toBe('019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9');
+    expect($player->autodarts_user_id)->toBe($userId); // Sollte die eindeutige userId sein
 
     $throw = DartThrow::first();
     expect($throw->segment_number)->toBe(20);
@@ -191,7 +231,43 @@ test('handleMatchState marks match as finished with winner', function () {
 test('multiple throw events for same turn accumulate correctly', function () {
     $matchId = '019a8d99-9fd4-7885-a9fe-2139955793c2';
     $turnId = '019a8d99-ae3a-7d85-9a89-af9677e1f49e';
-    $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9';
+    $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
+    $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
+
+    // First create a match_state webhook so the throw events can find the userId
+    $matchStatePayload = [
+        'event' => 'match_state',
+        'matchId' => $matchId,
+        'variant' => 'X01',
+        'data' => [
+            'match' => [
+                'id' => $matchId,
+                'type' => 'Online',
+                'createdAt' => '2025-11-16T16:57:53.034663222Z',
+                'finished' => false,
+                'settings' => ['baseScore' => 501],
+                'players' => [
+                    [
+                        'id' => $playerId, // Spiel-spezifische ID
+                        'userId' => $userId, // Eindeutige Benutzer-ID
+                        'name' => 'TestPlayer',
+                        'user' => ['country' => 'de'],
+                    ],
+                ],
+                'scores' => [['legs' => 0, 'sets' => 0]],
+                'turns' => [],
+            ],
+        ],
+    ];
+
+    $matchStateWebhook = WebhookCall::create([
+        'name' => 'default',
+        'url' => 'test',
+        'payload' => $matchStatePayload,
+    ]);
+
+    $matchStateJob = new WebhookProcessing($matchStateWebhook);
+    $matchStateJob->handle();
 
     // First throw
     $payload1 = [
@@ -277,13 +353,52 @@ test('multiple throw events for same turn accumulate correctly', function () {
 });
 
 test('handleThrow can handle negative points from Bull-Out', function () {
+    $matchId = '019a8d99-9fd4-7885-a9fe-2139955793c2';
+    $playerId = '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9'; // Spiel-spezifische ID
+    $userId = 'a38b3a08-002a-4551-9ff9-d38e076f2eb8'; // Eindeutige Benutzer-ID
+
+    // First create a match_state webhook so the throw event can find the userId
+    $matchStatePayload = [
+        'event' => 'match_state',
+        'matchId' => $matchId,
+        'variant' => 'X01',
+        'data' => [
+            'match' => [
+                'id' => $matchId,
+                'type' => 'Online',
+                'createdAt' => '2025-11-16T16:57:53.034663222Z',
+                'finished' => false,
+                'settings' => ['baseScore' => 501],
+                'players' => [
+                    [
+                        'id' => $playerId, // Spiel-spezifische ID
+                        'userId' => $userId, // Eindeutige Benutzer-ID
+                        'name' => 'TestPlayer',
+                        'user' => ['country' => 'de'],
+                    ],
+                ],
+                'scores' => [['legs' => 0, 'sets' => 0]],
+                'turns' => [],
+            ],
+        ],
+    ];
+
+    $matchStateWebhook = WebhookCall::create([
+        'name' => 'default',
+        'url' => 'test',
+        'payload' => $matchStatePayload,
+    ]);
+
+    $matchStateJob = new WebhookProcessing($matchStateWebhook);
+    $matchStateJob->handle();
+
     $payload = [
         'event' => 'throw',
-        'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+        'matchId' => $matchId,
         'data' => [
-            'matchId' => '019a8d99-9fd4-7885-a9fe-2139955793c2',
+            'matchId' => $matchId,
             'turnId' => '019a8d99-ae3a-7d85-9a89-af9677e1f49e',
-            'playerId' => '019a8d99-a0c2-7cb2-99e0-ffcb91d8bfc9',
+            'playerId' => $playerId,
             'playerName' => 'TestPlayer',
             'leg' => 1,
             'set' => 1,

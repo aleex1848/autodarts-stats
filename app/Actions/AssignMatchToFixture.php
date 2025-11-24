@@ -6,7 +6,6 @@ use App\Enums\FixtureStatus;
 use App\Models\DartMatch;
 use App\Models\MatchdayFixture;
 use App\Services\LeagueStandingsCalculator;
-use Illuminate\Support\Facades\DB;
 
 class AssignMatchToFixture
 {
@@ -23,8 +22,8 @@ class AssignMatchToFixture
 
         // Validate that both players from the fixture are in the match
         $playerIds = $match->players->pluck('id')->toArray();
-        
-        if (!in_array($fixture->home_player_id, $playerIds) || !in_array($fixture->away_player_id, $playerIds)) {
+
+        if (! in_array($fixture->home_player_id, $playerIds) || ! in_array($fixture->away_player_id, $playerIds)) {
             throw new \InvalidArgumentException('Die Spieler des Matches stimmen nicht mit dem Fixture überein.');
         }
 
@@ -32,7 +31,7 @@ class AssignMatchToFixture
         $homePlayer = $match->players->firstWhere('id', $fixture->home_player_id);
         $awayPlayer = $match->players->firstWhere('id', $fixture->away_player_id);
 
-        if (!$homePlayer || !$awayPlayer) {
+        if (! $homePlayer || ! $awayPlayer) {
             throw new \InvalidArgumentException('Spieler nicht im Match gefunden.');
         }
 
@@ -70,11 +69,11 @@ class AssignMatchToFixture
 
         // Update participant stats
         $league = $fixture->matchday->league;
-        
+
         $homeParticipant = $league->participants()
             ->where('player_id', $fixture->home_player_id)
             ->first();
-            
+
         $awayParticipant = $league->participants()
             ->where('player_id', $fixture->away_player_id)
             ->first();
@@ -93,4 +92,3 @@ class AssignMatchToFixture
         return true;
     }
 }
-

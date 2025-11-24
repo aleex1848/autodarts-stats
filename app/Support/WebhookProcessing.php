@@ -37,15 +37,7 @@ class WebhookProcessing extends ProcessWebhookJob
         $data = $payload['data'];
 
         DB::transaction(function () use ($payload, $data) {
-            // Get or create player with deadlock retry
-            // Also try to find by name to avoid duplicates if userId changed
-            $player = $this->findOrCreatePlayer(
-                $data['playerId'],
-                $data['playerName'],
-                []
-            );
-
-            // Get or create match with deadlock retry
+            // Get or create match first to access player mapping
             $match = $this->firstOrCreateWithRetry(
                 DartMatch::class,
                 ['autodarts_match_id' => $payload['matchId']],
@@ -54,6 +46,16 @@ class WebhookProcessing extends ProcessWebhookJob
                     'type' => 'Online',
                     'started_at' => now(),
                 ]
+            );
+
+            // Find userId from playerId (spiel-spezifische ID) by looking up in match_state webhook
+            $userId = $this->findUserIdFromPlayerId($payload['matchId'], $data['playerId'], $data['playerName']);
+
+            // Get or create player with deadlock retry using the unique userId
+            $player = $this->findOrCreatePlayer(
+                $userId,
+                $data['playerName'],
+                []
             );
 
             // Get or create leg with deadlock retry
@@ -270,10 +272,34 @@ class WebhookProcessing extends ProcessWebhookJob
 
     protected function processTurnsFromMatchState(DartMatch $match, array $turns, array $matchData): void
     {
+        // Build a mapping from playerId (spiel-spezifische ID) to userId (eindeutige ID)
+        $playerIdToUserIdMap = [];
+        foreach ($matchData['players'] as $playerData) {
+            if (isset($playerData['id']) && isset($playerData['userId'])) {
+                $playerIdToUserIdMap[$playerData['id']] = $playerData['userId'];
+            }
+        }
+
         foreach ($turns as $turnData) {
-            $player = Player::where('autodarts_user_id', $turnData['playerId'])->first();
-            if (! $player) {
+            // Get userId from playerId using the mapping
+            $playerId = $turnData['playerId'] ?? null;
+            if (! $playerId) {
                 continue;
+            }
+
+            $userId = $playerIdToUserIdMap[$playerId] ?? null;
+            if (! $userId) {
+                // Fallback: try to find player by playerId (for backwards compatibility)
+                $player = Player::where('autodarts_user_id', $playerId)->first();
+                if (! $player) {
+                    continue;
+                }
+            } else {
+                // Find player by the unique userId
+                $player = Player::where('autodarts_user_id', $userId)->first();
+                if (! $player) {
+                    continue;
+                }
             }
 
             // Check if turn already exists - if so, use its existing leg
@@ -1109,5 +1135,52 @@ class WebhookProcessing extends ProcessWebhookJob
     protected function updatePlayerStatistics(DartMatch $match): void
     {
         \App\Support\MatchStatisticsCalculator::calculateAndUpdate($match);
+    }
+
+    /**
+     * Find the unique userId from a playerId (spiel-spezifische ID) by looking up in match_state webhook
+     */
+    protected function findUserIdFromPlayerId(string $matchId, string $playerId, string $playerName): string
+    {
+        // Try to find a match_state webhook for this match
+        // Use database-agnostic approach by loading all match_state webhooks and filtering in PHP
+        $matchStateWebhooks = \Spatie\WebhookClient\Models\WebhookCall::whereNotNull('payload')
+            ->get()
+            ->filter(function ($webhook) use ($matchId) {
+                $payload = $webhook->payload;
+
+                return ($payload['event'] ?? null) === 'match_state'
+                    && ($payload['matchId'] ?? null) === $matchId;
+            })
+            ->sortByDesc('created_at');
+
+        $matchStateWebhook = $matchStateWebhooks->first();
+
+        if ($matchStateWebhook && isset($matchStateWebhook->payload['data']['match']['players'])) {
+            // Look for the player in the players array by matching the id (playerId)
+            foreach ($matchStateWebhook->payload['data']['match']['players'] as $playerData) {
+                if (isset($playerData['id']) && $playerData['id'] === $playerId) {
+                    // Found the player - return the userId if available
+                    if (isset($playerData['userId'])) {
+                        return $playerData['userId'];
+                    }
+                    // If no userId, it's a bot - generate deterministic UUID
+                    if (isset($playerData['name'])) {
+                        return $this->generateBotUuid($playerData['name']);
+                    }
+                }
+            }
+        }
+
+        // Fallback: if no match_state found or player not found, check if player exists by playerId
+        // This handles edge cases where match_state hasn't arrived yet
+        $existingPlayer = Player::where('autodarts_user_id', $playerId)->first();
+        if ($existingPlayer) {
+            // Player exists with this ID - return it (might be old data, but better than creating duplicate)
+            return $existingPlayer->autodarts_user_id;
+        }
+
+        // Last resort: generate bot UUID based on name
+        return $this->generateBotUuid($playerName);
     }
 }

@@ -26,7 +26,7 @@ class LeagueStandingsCalculator
         ])->values()->map(function ($participant, $index) {
             $participant->final_position = $index + 1;
             $participant->saveQuietly();
-            
+
             return $participant;
         });
     }
@@ -34,7 +34,7 @@ class LeagueStandingsCalculator
     public function updateParticipantStats(LeagueParticipant $participant): void
     {
         $league = $participant->league;
-        
+
         // Get all fixtures where this participant is playing
         $fixtures = DB::table('matchday_fixtures')
             ->join('matchdays', 'matchday_fixtures.matchday_id', '=', 'matchdays.id')
@@ -61,12 +61,12 @@ class LeagueStandingsCalculator
             $stats['matches_played']++;
 
             $isHome = $fixture->home_player_id == $participant->player_id;
-            
+
             if ($isHome) {
                 $stats['points'] += $fixture->points_awarded_home;
                 $stats['legs_won'] += $fixture->home_legs_won ?? 0;
                 $stats['legs_lost'] += $fixture->away_legs_won ?? 0;
-                
+
                 if ($fixture->winner_player_id == $participant->player_id) {
                     $stats['matches_won']++;
                 } elseif ($fixture->winner_player_id === null) {
@@ -78,7 +78,7 @@ class LeagueStandingsCalculator
                 $stats['points'] += $fixture->points_awarded_away;
                 $stats['legs_won'] += $fixture->away_legs_won ?? 0;
                 $stats['legs_lost'] += $fixture->home_legs_won ?? 0;
-                
+
                 if ($fixture->winner_player_id == $participant->player_id) {
                     $stats['matches_won']++;
                 } elseif ($fixture->winner_player_id === null) {
@@ -98,7 +98,7 @@ class LeagueStandingsCalculator
     public function checkForTiebreaker(League $league): ?array
     {
         $standings = $this->calculateStandings($league);
-        
+
         // Check if league is completed
         $allMatchesPlayed = $league->matchdays()
             ->where('is_playoff', false)
@@ -109,13 +109,13 @@ class LeagueStandingsCalculator
                     ->count() === 0;
             });
 
-        if (!$allMatchesPlayed) {
+        if (! $allMatchesPlayed) {
             return null;
         }
 
         // Check for ties at the top position
         $topStanding = $standings->first();
-        if (!$topStanding) {
+        if (! $topStanding) {
             return null;
         }
 
@@ -132,4 +132,3 @@ class LeagueStandingsCalculator
         return null;
     }
 }
-

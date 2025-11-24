@@ -25,7 +25,7 @@ class SplitLeague
         DB::transaction(function () use ($league, $splits, &$createdLeagues) {
             foreach ($splits as $index => $split) {
                 $newLeague = League::create([
-                    'name' => $league->name . ' ' . ($index + 1),
+                    'name' => $league->name.' '.($index + 1),
                     'description' => $league->description,
                     'max_players' => $split['max_players'] ?? $league->max_players,
                     'mode' => $league->mode,
@@ -59,4 +59,3 @@ class SplitLeague
         return $createdLeagues;
     }
 }
-
