@@ -15,35 +15,22 @@ return new class extends Migration
         // Only add foreign keys for MySQL/MariaDB, not for SQLite
         if (DB::getDriverName() !== 'sqlite') {
             Schema::table('bull_offs', function (Blueprint $table) {
-                // Check if foreign keys already exist by trying to add them
-                // If they exist, the migration will fail, so we catch the exception
-                try {
+                // Check if foreign keys already exist before adding them
+                if (! $this->hasForeignKey('bull_offs', 'bull_offs_match_id_foreign')) {
                     $table->foreign('match_id')->references('id')->on('matches')->onDelete('cascade');
-                } catch (\Exception $e) {
-                    // Foreign key might already exist, ignore
                 }
-                try {
+                if (! $this->hasForeignKey('bull_offs', 'bull_offs_player_id_foreign')) {
                     $table->foreign('player_id')->references('id')->on('players')->onDelete('cascade');
-                } catch (\Exception $e) {
-                    // Foreign key might already exist, ignore
                 }
             });
 
             // Add indexes separately
             Schema::table('bull_offs', function (Blueprint $table) {
-                try {
-                    if (! $this->hasIndex('bull_offs', 'bull_offs_match_id_index')) {
-                        $table->index('match_id', 'bull_offs_match_id_index');
-                    }
-                } catch (\Exception $e) {
-                    // Index might already exist
+                if (! $this->hasIndex('bull_offs', 'bull_offs_match_id_index')) {
+                    $table->index('match_id', 'bull_offs_match_id_index');
                 }
-                try {
-                    if (! $this->hasIndex('bull_offs', 'bull_offs_player_id_index')) {
-                        $table->index('player_id', 'bull_offs_player_id_index');
-                    }
-                } catch (\Exception $e) {
-                    // Index might already exist
+                if (! $this->hasIndex('bull_offs', 'bull_offs_player_id_index')) {
+                    $table->index('player_id', 'bull_offs_player_id_index');
                 }
             });
         }
@@ -93,6 +80,28 @@ return new class extends Migration
                  AND TABLE_NAME = ? 
                  AND INDEX_NAME = ?',
                 [$databaseName, $table, $index]
+            );
+
+            return ! empty($result);
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    protected function hasForeignKey(string $table, string $foreignKey): bool
+    {
+        try {
+            $connection = Schema::getConnection();
+            $databaseName = $connection->getDatabaseName();
+
+            $result = $connection->select(
+                'SELECT CONSTRAINT_NAME 
+                 FROM information_schema.KEY_COLUMN_USAGE 
+                 WHERE TABLE_SCHEMA = ? 
+                 AND TABLE_NAME = ? 
+                 AND CONSTRAINT_NAME = ? 
+                 AND REFERENCED_TABLE_NAME IS NOT NULL',
+                [$databaseName, $table, $foreignKey]
             );
 
             return ! empty($result);
