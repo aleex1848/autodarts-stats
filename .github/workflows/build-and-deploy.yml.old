@@ -15,15 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Login to GHCR
+        env:
+          TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build and Push
         uses: docker/build-push-action@v6
@@ -35,21 +34,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
-          build-args: |
-            FLUXUI_MAIL=${{ secrets.FLUXUI_MAIL }}
-            FLUXUI_KEY=${{ secrets.FLUXUI_KEY }}
-            REVERB_HOST=${{ secrets.REVERB_HOST }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Progress-Ausgabe für bessere Sichtbarkeit aller Build-Schritte
-          progress: plain
-
-      - name: Verify Build Artifacts (Optional Debug Step)
-        if: false  # Setze auf true, um diesen Step zu aktivieren (erhöht Build-Zeit)
-        run: |
-          echo "=== Build-Artefakte Verifizierung ==="
-          echo "Dieser Step kann aktiviert werden, um die Build-Artefakte zu überprüfen"
-          echo "Setze 'if: false' auf 'if: true' um zu aktivieren"
 
       - name: Trigger Portainer Webhook
         if: contains(github.event.head_commit.message, '[restart]')
