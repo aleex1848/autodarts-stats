@@ -170,6 +170,7 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
 
         // Download categories routes
         Volt::route('admin/download-categories', 'admin.download-categories.index')->name('download-categories.index');
+        Volt::route('admin/page-settings', 'admin.page-settings.index')->name('page-settings.index');
     });
 
 Route::middleware(['auth', 'verified'])

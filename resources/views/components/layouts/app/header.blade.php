@@ -134,6 +134,15 @@
                             >
                                 {{ __('Downloads') }}
                             </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="adjustments-vertical"
+                                :href="route('admin.page-settings.index')"
+                                :current="request()->routeIs('admin.page-settings.*')"
+                                wire:navigate
+                            >
+                                {{ __('Page Settings') }}
+                            </flux:navmenu.item>
                         </flux:navmenu>
                     </flux:dropdown>
                 @endhasanyrole
@@ -309,6 +318,15 @@
                             wire:navigate
                         >
                             {{ __('Downloads') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="adjustments-vertical"
+                            :href="route('admin.page-settings.index')"
+                            :current="request()->routeIs('admin.page-settings.*')"
+                            wire:navigate
+                        >
+                            {{ __('Page Settings') }}
                         </flux:navlist.item>
                     </flux:navlist.group>
                 @endhasanyrole
