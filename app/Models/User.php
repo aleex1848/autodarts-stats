@@ -100,4 +100,51 @@ class User extends Authenticatable
     {
         return $this->hasMany(LeagueRegistration::class);
     }
+
+    /**
+     * Get all leagues where the user is registered or is a participant
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, League>
+     */
+    public function leagues(): \Illuminate\Database\Eloquent\Collection
+    {
+        // Ensure player relationship is loaded
+        if (!$this->relationLoaded('player')) {
+            $this->load('player');
+        }
+
+        $leagueIds = collect();
+
+        // Get league IDs from registrations by user_id
+        $registeredByUserId = League::whereHas('registrations', function ($query) {
+            $query->where('user_id', $this->id);
+        })->pluck('id');
+
+        $leagueIds = $leagueIds->merge($registeredByUserId);
+
+        // Get league IDs from registrations by player_id (if player exists)
+        if ($this->player) {
+            $registeredByPlayerId = League::whereHas('registrations', function ($query) {
+                $query->where('player_id', $this->player->id);
+            })->pluck('id');
+
+            $leagueIds = $leagueIds->merge($registeredByPlayerId);
+
+            // Get league IDs from participants (through player)
+            $participantLeagueIds = League::whereHas('participants', function ($query) {
+                $query->where('player_id', $this->player->id);
+            })->pluck('id');
+
+            $leagueIds = $leagueIds->merge($participantLeagueIds);
+        }
+
+        // Get unique league IDs and fetch the leagues
+        $uniqueLeagueIds = $leagueIds->unique()->values()->all();
+
+        if (empty($uniqueLeagueIds)) {
+            return League::query()->whereRaw('1 = 0')->get(); // Return empty Eloquent Collection
+        }
+
+        return League::whereIn('id', $uniqueLeagueIds)->get();
+    }
 }

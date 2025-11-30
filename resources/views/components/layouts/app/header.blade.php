@@ -12,9 +12,131 @@
             </a>
 
             <flux:navbar class="-mb-px max-lg:hidden">
-                <flux:navbar.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                <flux:navbar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                     {{ __('Dashboard') }}
                 </flux:navbar.item>
+
+                <flux:navbar.item
+                    icon="trophy"
+                    :href="route('matches.index')"
+                    :current="request()->routeIs('matches.*') && !request()->routeIs('admin.*')"
+                    wire:navigate
+                >
+                    {{ __('Matches') }}
+                </flux:navbar.item>
+
+                <flux:dropdown>
+                    <flux:navbar.item
+                        icon="flag"
+                        icon:trailing="chevron-down"
+                        :current="request()->routeIs('leagues.*') && !request()->routeIs('admin.*')"
+                    >
+                        {{ __('Liga') }}
+                    </flux:navbar.item>
+
+                    <flux:navmenu>
+                        <flux:navmenu.item
+                            icon="list-bullet"
+                            :href="route('leagues.index')"
+                            :current="request()->routeIs('leagues.index')"
+                            wire:navigate
+                        >
+                            {{ __('Übersicht') }}
+                        </flux:navmenu.item>
+
+                        <flux:menu.separator />
+
+                        @php
+                            $user = auth()->user();
+                            if ($user) {
+                                if (!$user->relationLoaded('player')) {
+                                    $user->load('player');
+                                }
+                                $userLeagues = $user->leagues();
+                            } else {
+                                $userLeagues = collect();
+                            }
+                        @endphp
+                        
+                        @if($userLeagues->isNotEmpty())
+                            <flux:menu.group heading="Meine Ligen">
+                                @foreach($userLeagues as $league)
+                                    <flux:navmenu.item
+                                        :href="route('leagues.show', $league)"
+                                        :current="request()->routeIs('leagues.show', $league)"
+                                        wire:navigate
+                                    >
+                                        {{ $league->name }}
+                                    </flux:navmenu.item>
+                                @endforeach
+                            </flux:menu.group>
+                        @endif
+                    </flux:navmenu>
+                </flux:dropdown>
+
+                @hasanyrole('Super-Admin|Admin')
+                    <flux:dropdown>
+                        <flux:navbar.item icon="key" icon:trailing="chevron-down">
+                            {{ __('Admin') }}
+                        </flux:navbar.item>
+
+                        <flux:navmenu>
+                            <flux:navmenu.item
+                                icon="trophy"
+                                :href="route('admin.matches.index')"
+                                :current="request()->routeIs('admin.matches.*')"
+                                wire:navigate
+                            >
+                                {{ __('Matches') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="flag"
+                                :href="route('admin.leagues.index')"
+                                :current="request()->routeIs('admin.leagues.*')"
+                                wire:navigate
+                            >
+                                {{ __('Ligen') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="users"
+                                :href="route('admin.users.index')"
+                                :current="request()->routeIs('admin.users.*')"
+                                wire:navigate
+                            >
+                                {{ __('Benutzer') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="key"
+                                :href="route('admin.roles.index')"
+                                :current="request()->routeIs('admin.roles.*')"
+                                wire:navigate
+                            >
+                                {{ __('Rollen') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="arrows-right-left"
+                                :href="route('admin.user-switch.index')"
+                                :current="request()->routeIs('admin.user-switch.*')"
+                                wire:navigate
+                            >
+                                {{ __('User-Switch') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="arrow-down-tray"
+                                :href="route('admin.downloads.index')"
+                                :current="request()->routeIs('admin.downloads.*') || request()->routeIs('admin.download-categories.*')"
+                                wire:navigate
+                            >
+                                {{ __('Downloads') }}
+                            </flux:navmenu.item>
+                        </flux:navmenu>
+                    </flux:dropdown>
+                @endhasanyrole
             </flux:navbar>
 
             <flux:spacer />
@@ -97,11 +219,99 @@
             </a>
 
             <flux:navlist variant="outline">
-                <flux:navlist.group :heading="__('Platform')">
-                    <flux:navlist.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
-                    {{ __('Dashboard') }}
+                <flux:navlist.group :heading="__('Platform')" class="grid">
+                    <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                        {{ __('Dashboard') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item
+                        icon="trophy"
+                        :href="route('matches.index')"
+                        :current="request()->routeIs('matches.*') && !request()->routeIs('admin.*')"
+                        wire:navigate
+                    >
+                        {{ __('Matches') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item
+                        icon="flag"
+                        :href="route('leagues.index')"
+                        :current="request()->routeIs('leagues.index')"
+                        wire:navigate
+                    >
+                        {{ __('Liga') }}
                     </flux:navlist.item>
                 </flux:navlist.group>
+
+                @if(auth()->user()->leagues()->isNotEmpty())
+                    <flux:navlist.group :heading="__('Meine Ligen')" expandable expanded class="grid">
+                        @foreach(auth()->user()->leagues() as $league)
+                            <flux:navlist.item
+                                :href="route('leagues.show', $league)"
+                                :current="request()->routeIs('leagues.show', $league)"
+                                wire:navigate
+                            >
+                                {{ $league->name }}
+                            </flux:navlist.item>
+                        @endforeach
+                    </flux:navlist.group>
+                @endif
+
+                @hasanyrole('Super-Admin|Admin')
+                    <flux:navlist.group :heading="__('Admin')" class="grid">
+                        <flux:navlist.item
+                            icon="trophy"
+                            :href="route('admin.matches.index')"
+                            :current="request()->routeIs('admin.matches.*')"
+                            wire:navigate
+                        >
+                            {{ __('Matches') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="flag"
+                            :href="route('admin.leagues.index')"
+                            :current="request()->routeIs('admin.leagues.*')"
+                            wire:navigate
+                        >
+                            {{ __('Ligen') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="users"
+                            :href="route('admin.users.index')"
+                            :current="request()->routeIs('admin.users.*')"
+                            wire:navigate
+                        >
+                            {{ __('Benutzer') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="key"
+                            :href="route('admin.roles.index')"
+                            :current="request()->routeIs('admin.roles.*')"
+                            wire:navigate
+                        >
+                            {{ __('Rollen') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="arrows-right-left"
+                            :href="route('admin.user-switch.index')"
+                            :current="request()->routeIs('admin.user-switch.*')"
+                            wire:navigate
+                        >
+                            {{ __('User-Switch') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="arrow-down-tray"
+                            :href="route('admin.downloads.index')"
+                            :current="request()->routeIs('admin.downloads.*') || request()->routeIs('admin.download-categories.*')"
+                            wire:navigate
+                        >
+                            {{ __('Downloads') }}
+                        </flux:navlist.item>
+                    </flux:navlist.group>
+                @endhasanyrole
             </flux:navlist>
 
             <flux:spacer />
