@@ -14,4 +14,5 @@ chmod 666 /app/storage/logs/laravel.log
 npm install
 npm run build --production
 php artisan optimize
+php artisan storage:link
 chown -R 1000:1000 /app/storage
