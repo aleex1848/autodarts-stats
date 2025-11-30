@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Support\PathGenerators\HeaderPathGenerator;
+use App\Support\PathGenerators\FrontpageLogoPathGenerator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\MediaLibrary\HasMedia;
@@ -10,7 +10,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\Support\PathGenerator\PathGeneratorFactory;
 
-class Header extends Model implements HasMedia
+class FrontpageLogo extends Model implements HasMedia
 {
     use HasFactory;
     use InteractsWithMedia;
@@ -29,12 +29,12 @@ class Header extends Model implements HasMedia
 
     protected static function booting(): void
     {
-        PathGeneratorFactory::setCustomPathGenerators(static::class, HeaderPathGenerator::class);
+        PathGeneratorFactory::setCustomPathGenerators(static::class, FrontpageLogoPathGenerator::class);
     }
 
     public function registerMediaCollections(): void
     {
-        $this->addMediaCollection('header')
+        $this->addMediaCollection('frontpage-logo')
             ->singleFile();
     }
 

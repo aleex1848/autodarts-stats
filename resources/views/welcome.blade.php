@@ -21,6 +21,11 @@
         </style>
     </head>
     <body class="bg-[#FDFDFC] dark:bg-[#0a0a0a] text-[#1b1b18] flex p-6 lg:p-8 items-center lg:justify-center min-h-screen flex-col">
+        @php
+            $activeFrontpageLogo = \App\Models\FrontpageLogo::getActive();
+            $frontpageLogoMedia = $activeFrontpageLogo?->getFirstMedia('frontpage-logo');
+        @endphp
+
         <header class="w-full lg:max-w-4xl max-w-[335px] text-sm mb-6 not-has-[nav]:hidden">
             @if (Route::has('login'))
                 <nav class="flex items-center justify-end gap-4">
@@ -50,6 +55,21 @@
                 </nav>
             @endif
         </header>
+        
+        @if($frontpageLogoMedia)
+            <div class="mb-6 w-full lg:max-w-4xl max-w-[335px]">
+                <div class="relative w-full overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700">
+                    <img
+                        src="{{ $frontpageLogoMedia->getUrl() }}"
+                        srcset="{{ $frontpageLogoMedia->getSrcset() }}"
+                        sizes="100vw"
+                        alt="{{ $activeFrontpageLogo->name }}"
+                        class="h-auto w-full object-cover"
+                    />
+                </div>
+            </div>
+        
+@else
         <div class="flex items-center justify-center w-full transition-opacity opacity-100 duration-750 lg:grow starting:opacity-0">
             <main class="flex max-w-[335px] w-full flex-col-reverse lg:max-w-4xl lg:flex-row">
                 <div class="text-[13px] leading-[20px] flex-1 p-6 pb-12 lg:p-20 bg-white dark:bg-[#161615] dark:text-[#EDEDEC] shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d] rounded-es-lg rounded-ee-lg lg:rounded-ss-lg lg:rounded-ee-none">
@@ -270,7 +290,7 @@
                 </div>
             </main>
         </div>
-
+        @endif
         @if (Route::has('login'))
             <div class="h-14.5 hidden lg:block"></div>
         @endif
