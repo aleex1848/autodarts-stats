@@ -8,6 +8,7 @@
             @endif
             <flux:navlist.item :href="route('api-tokens.index')" wire:navigate>{{ __('API Tokens') }}</flux:navlist.item>
             <flux:navlist.item :href="route('appearance.edit')" wire:navigate>{{ __('Appearance') }}</flux:navlist.item>
+            <flux:navlist.item :href="route('identify.edit')" wire:navigate>{{ __('Spieler identifizieren') }}</flux:navlist.item>
         </flux:navlist>
     </div>
 

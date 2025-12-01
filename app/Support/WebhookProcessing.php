@@ -3,17 +3,20 @@
 namespace App\Support;
 
 use App\Events\MatchUpdated;
+use App\Events\PlayerIdentified;
 use App\Models\BullOff;
 use App\Models\DartMatch;
 use App\Models\DartThrow;
 use App\Models\Leg;
 use App\Models\Player;
 use App\Models\Turn;
+use App\Models\User;
 use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 
 class WebhookProcessing extends ProcessWebhookJob
@@ -157,8 +160,9 @@ class WebhookProcessing extends ProcessWebhookJob
     {
         $payload = $this->webhookCall->payload;
         $matchData = $payload['data']['match'];
+        $match = null;
 
-        DB::transaction(function () use ($payload, $matchData) {
+        DB::transaction(function () use ($payload, $matchData, &$match) {
             // Get or create match with deadlock retry
             $match = $this->firstOrCreateWithRetry(
                 DartMatch::class,
@@ -335,10 +339,157 @@ class WebhookProcessing extends ProcessWebhookJob
             broadcast(new MatchUpdated($match->fresh()));
         });
 
+        // Check for player identification (outside transaction to ensure broadcasts work correctly)
+        $this->handlePlayerIdentification($match, $matchData);
+
         Log::debug('match_state processed', [
             'matchId' => $payload['matchId'],
             'finished' => $matchData['finished'] ?? false,
         ]);
+    }
+
+    protected function handlePlayerIdentification(DartMatch $match, array $matchData): void
+    {
+        // Try to identify the user from the webhook request
+        $user = $this->getUserFromWebhook();
+
+        // If we can't identify the user from the webhook, fall back to finding all users in identifying mode
+        if (! $user) {
+            $identifyingUsers = User::where('is_identifying', true)->get();
+
+            if ($identifyingUsers->isEmpty()) {
+                return;
+            }
+
+            $user = $identifyingUsers->first();
+        } else {
+            // Check if this user is in identifying mode
+            if (! $user->is_identifying) {
+                return;
+            }
+        }
+
+        // Find the player that is not a bot (doesn't have "Bot Level" in name)
+        $nonBotPlayer = null;
+        foreach ($matchData['players'] as $playerData) {
+            $playerName = $playerData['name'] ?? '';
+            $userId = $playerData['userId'] ?? null;
+
+            // Skip bots (name starts with "Bot Level" or no userId)
+            if (str_starts_with($playerName, 'Bot Level') || ! $userId) {
+                continue;
+            }
+
+            // Check if this is a bot UUID (starts with 00000000)
+            if (str_starts_with($userId, '00000000-0000-0000')) {
+                continue;
+            }
+
+            // Find the player in our database
+            $player = Player::where('autodarts_user_id', $userId)->first();
+            if ($player) {
+                $nonBotPlayer = $player;
+                break;
+            }
+        }
+
+        if (! $nonBotPlayer) {
+            // No suitable player found - deactivate identifying mode
+            $user->update(['is_identifying' => false]);
+            broadcast(new PlayerIdentified(
+                $user,
+                null,
+                false,
+                'Kein passender Spieler gefunden. Bitte stelle sicher, dass du gegen einen Bot spielst und dein Autodarts-Account korrekt ist.'
+            ));
+
+            return;
+        }
+
+        // Check if player is already linked to another user
+        if ($nonBotPlayer->user_id !== null && $nonBotPlayer->user_id !== $user->id) {
+            $user->update(['is_identifying' => false]);
+            broadcast(new PlayerIdentified(
+                $user,
+                null,
+                false,
+                'Dieser Spieler ist bereits mit einem anderen Account verknüpft.'
+            ));
+
+            return;
+        }
+
+        // Link player to user
+        $nonBotPlayer->update(['user_id' => $user->id]);
+        $user->update(['is_identifying' => false]);
+
+        // Broadcast success event
+        broadcast(new PlayerIdentified(
+            $user,
+            $nonBotPlayer,
+            true,
+            "Spieler '{$nonBotPlayer->name}' wurde erfolgreich mit deinem Account verknüpft."
+        ));
+
+        Log::info('Player identified', [
+            'user_id' => $user->id,
+            'player_id' => $nonBotPlayer->id,
+            'player_name' => $nonBotPlayer->name,
+        ]);
+    }
+
+    /**
+     * Try to get the user from the webhook request by extracting the Sanctum token from headers.
+     */
+    protected function getUserFromWebhook(): ?User
+    {
+        try {
+            $headers = $this->webhookCall->headers ?? [];
+
+            // Headers might be stored as JSON string or array
+            if (is_string($headers)) {
+                $headers = json_decode($headers, true);
+            }
+
+            if (! is_array($headers)) {
+                return null;
+            }
+
+            // Look for Authorization header
+            $authorization = null;
+            foreach ($headers as $key => $value) {
+                if (strtolower($key) === 'authorization' || strtolower($key) === 'authorization-header') {
+                    $authorization = is_array($value) ? ($value[0] ?? null) : $value;
+                    break;
+                }
+            }
+
+            if (! $authorization) {
+                return null;
+            }
+
+            // Extract token from "Bearer {token}" format
+            if (preg_match('/Bearer\s+(.+)/i', $authorization, $matches)) {
+                $token = $matches[1];
+            } else {
+                $token = $authorization;
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (! $accessToken) {
+                return null;
+            }
+
+            return $accessToken->tokenable instanceof User ? $accessToken->tokenable : null;
+        } catch (\Exception $e) {
+            Log::debug('Failed to get user from webhook', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     protected function processTurnsFromMatchState(DartMatch $match, array $turns, array $matchData): void
