@@ -135,7 +135,14 @@ new class extends Component {
                     <tr wire:key="league-{{ $league->id }}">
                         <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
                             <div class="flex flex-col">
-                                <span class="font-semibold">{{ $league->name }}</span>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-semibold">{{ $league->name }}</span>
+                                    @if ($league->slug)
+                                        <flux:badge size="xs" variant="subtle">
+                                            {{ $league->slug }}
+                                        </flux:badge>
+                                    @endif
+                                </div>
                                 <span class="text-xs text-zinc-500 dark:text-zinc-400">
                                     {{ __('Max. :count Spieler', ['count' => $league->max_players]) }}
                                 </span>

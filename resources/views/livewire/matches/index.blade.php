@@ -65,6 +65,7 @@ new class extends Component {
             ->with([
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
                 'winner',
+                'fixture.matchday.league',
             ])
             ->whereHas('players', fn ($query) => $query->where('players.id', $this->playerId))
             ->when($this->statusFilter === 'finished', fn ($query) => $query->whereNotNull('finished_at'))
@@ -248,7 +249,19 @@ new class extends Component {
                         <tr wire:key="player-match-{{ $match->id }}">
                             <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
                                 <div class="flex flex-col">
-                                    <span class="font-semibold">{{ $match->variant }} · {{ $match->type }}</span>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="font-semibold">{{ $match->variant }} · {{ $match->type }}</span>
+                                        @if ($match->fixture?->matchday)
+                                            <div class="flex items-center gap-1">
+                                                <flux:badge size="xs" variant="subtle">
+                                                    {{ $match->fixture->matchday->league->slug }}
+                                                </flux:badge>
+                                                <flux:badge size="xs" variant="subtle">
+                                                    {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
+                                                </flux:badge>
+                                            </div>
+                                        @endif
+                                    </div>
                                     <span class="text-xs text-zinc-500 dark:text-zinc-400">
                                         {{ $match->started_at?->format('d.m.Y H:i') ?? __('Unbekannter Start') }}
                                     </span>

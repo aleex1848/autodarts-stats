@@ -5,6 +5,7 @@ use App\Enums\LeagueMode;
 use App\Enums\LeagueStatus;
 use App\Enums\LeagueVariant;
 use App\Models\League;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Livewire\Volt\Component;
 
@@ -13,6 +14,7 @@ new class extends Component {
     public League $league;
 
     public string $name = '';
+    public string $slug = '';
     public string $description = '';
     public int $max_players = 20;
     public string $mode = '';
@@ -26,6 +28,7 @@ new class extends Component {
     {
         $this->league = $league;
         $this->name = $league->name;
+        $this->slug = $league->slug ?? '';
         $this->description = $league->description ?? '';
         $this->max_players = $league->max_players;
         $this->mode = $league->mode;
@@ -46,10 +49,23 @@ new class extends Component {
         ];
     }
 
+    public function updatedName(): void
+    {
+        // Slug automatisch aus Name generieren, wenn Slug leer ist oder noch nicht manuell bearbeitet wurde
+        $this->slug = Str::slug($this->name);
+    }
+
+    public function updatedSlug(): void
+    {
+        // Slug automatisch bereinigen, um URL-kompatibel zu bleiben
+        $this->slug = Str::slug($this->slug);
+    }
+
     protected function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'unique:leagues,slug,' . $this->league->id],
             'description' => ['nullable', 'string'],
             'max_players' => ['required', 'integer', 'min:2', 'max:100'],
             'mode' => ['required', 'string'],
@@ -63,6 +79,11 @@ new class extends Component {
 
     public function save(): void
     {
+        // Slug automatisch aus Name generieren, falls leer
+        if (empty($this->slug)) {
+            $this->slug = Str::slug($this->name);
+        }
+        
         $validated = $this->validate();
 
         $this->league->update($validated);
@@ -85,10 +106,18 @@ new class extends Component {
 
             <div class="space-y-4">
                 <flux:input
-                    wire:model="name"
+                    wire:model.live="name"
                     :label="__('Name')"
                     type="text"
                     required
+                />
+
+                <flux:input
+                    wire:model="slug"
+                    :label="__('URL-kompatible Kurzversion')"
+                    type="text"
+                    :placeholder="__('wird automatisch aus dem Namen generiert')"
+                    help="{{ __('Wird automatisch generiert. Optional manuell anpassbar. Nur Kleinbuchstaben, Zahlen und Bindestriche erlaubt.') }}"
                 />
 
                 <flux:textarea

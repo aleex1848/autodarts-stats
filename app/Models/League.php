@@ -13,6 +13,7 @@ class League extends Model
 
     protected $fillable = [
         'name',
+        'slug',
         'description',
         'max_players',
         'mode',

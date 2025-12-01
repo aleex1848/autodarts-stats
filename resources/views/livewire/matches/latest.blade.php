@@ -16,16 +16,16 @@ new class extends Component {
 
     public function with(): array
     {
-        $totalCount = DartMatch::query()->ongoing()->count();
+        $totalCount = DartMatch::query()->finished()->count();
 
         $matches = DartMatch::query()
-            ->ongoing()
+            ->finished()
             ->with([
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
                 'winner',
                 'fixture.matchday.league',
             ])
-            ->orderByDesc('started_at')
+            ->orderByDesc('finished_at')
             ->orderByDesc('id')
             ->limit(5)
             ->get();
@@ -40,7 +40,7 @@ new class extends Component {
 <div class="relative h-full overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-zinc-900">
     <div class="flex h-full flex-col">
         <div class="border-b border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-700 dark:bg-zinc-800">
-            <h3 class="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{{ __('Running Matches') }}</h3>
+            <h3 class="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{{ __('Latest Matches') }}</h3>
         </div>
 
         <div class="flex-1 overflow-y-auto p-6">
@@ -49,7 +49,7 @@ new class extends Component {
                     href="{{ route('matches.show', $match) }}"
                     wire:navigate
                     class="group mb-4 block rounded-lg border border-neutral-200 bg-neutral-50 p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-zinc-800 dark:hover:border-neutral-600 dark:hover:bg-zinc-700"
-                    wire:key="running-match-{{ $match->id }}"
+                    wire:key="latest-match-{{ $match->id }}"
                 >
                     <div class="flex items-start justify-between gap-4">
                         <div class="flex-1 min-w-0">
@@ -101,10 +101,10 @@ new class extends Component {
                             </div>
 
                             <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                                @if ($match->started_at)
-                                    {{ $match->started_at->diffForHumans() }}
+                                @if ($match->finished_at)
+                                    {{ $match->finished_at->diffForHumans() }}
                                 @else
-                                    {{ __('Startzeit unbekannt') }}
+                                    {{ __('Endzeit unbekannt') }}
                                 @endif
                             </p>
                         </div>
@@ -117,7 +117,7 @@ new class extends Component {
                 </a>
             @empty
                 <div class="py-8 text-center">
-                    <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ __('Aktuell werden keine Matches aufgezeichnet.') }}</p>
+                    <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ __('Keine beendeten Matches vorhanden.') }}</p>
                 </div>
             @endforelse
         </div>
