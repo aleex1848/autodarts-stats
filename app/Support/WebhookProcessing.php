@@ -145,6 +145,18 @@ class WebhookProcessing extends ProcessWebhookJob
                 $throwData['throw']
             );
 
+            // Reset incomplete status if match was marked as incomplete but is now continuing
+            // Refresh match to get latest state
+            $match->refresh();
+            if ($match->is_incomplete === true && $match->finished_at === null) {
+                $match->update(['is_incomplete' => false]);
+                Log::info('Match resumed from incomplete status', [
+                    'matchId' => $payload['matchId'],
+                    'match_id' => $match->id,
+                    'reason' => 'New throw event received',
+                ]);
+            }
+
             // Broadcast MatchUpdated event after processing throw
             broadcast(new MatchUpdated($match->fresh()));
         });
@@ -319,6 +331,20 @@ class WebhookProcessing extends ProcessWebhookJob
                         $this->deriveWinnerFromFinalPosition($match);
                     }
                 }
+            }
+
+            // Reset incomplete status if match was marked as incomplete but is now continuing
+            // Refresh match to get latest state after all updates
+            $match->refresh();
+            $isFinished = $matchData['finished'] ?? false;
+            if ($match->is_incomplete === true && ! $isFinished && $match->finished_at === null) {
+                // A match_state event indicates the match is active, reset incomplete status
+                $match->update(['is_incomplete' => false]);
+                Log::info('Match resumed from incomplete status', [
+                    'matchId' => $payload['matchId'],
+                    'match_id' => $match->id,
+                    'reason' => 'New match_state event received',
+                ]);
             }
 
             // Process turns from match state (for correction detection)
