@@ -2,6 +2,7 @@
 
 use App\Models\Header;
 use App\Models\FrontpageLogo;
+use App\Services\SettingsService;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 
@@ -10,6 +11,11 @@ new class extends Component
     use WithFileUploads;
 
     public string $activeTab = 'headers';
+    
+    // Dashboard settings properties
+    public int $latestMatchesCount = 5;
+    public int $runningMatchesCount = 5;
+    public int $upcomingMatchesCount = 5;
     
     // Header properties
     public ?int $editingHeaderId = null;
@@ -31,12 +37,34 @@ new class extends Component
     public ?int $frontpageLogoIdBeingDeleted = null;
     public ?string $frontpageLogoNameBeingDeleted = null;
 
+    public function mount(): void
+    {
+        $this->latestMatchesCount = SettingsService::getLatestMatchesCount();
+        $this->runningMatchesCount = SettingsService::getRunningMatchesCount();
+        $this->upcomingMatchesCount = SettingsService::getUpcomingMatchesCount();
+    }
+
     public function with(): array
     {
         return [
             'headers' => Header::query()->orderByDesc('is_active')->orderBy('name')->get(),
             'frontpageLogos' => FrontpageLogo::query()->orderByDesc('is_active')->orderBy('name')->get(),
         ];
+    }
+
+    public function saveDashboardSettings(): void
+    {
+        $validated = $this->validate([
+            'latestMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
+            'runningMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
+            'upcomingMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        SettingsService::setLatestMatchesCount($validated['latestMatchesCount']);
+        SettingsService::setRunningMatchesCount($validated['runningMatchesCount']);
+        SettingsService::setUpcomingMatchesCount($validated['upcomingMatchesCount']);
+
+        $this->dispatch('notify', title: __('Dashboard-Einstellungen gespeichert'));
     }
 
     protected function headerRules(): array
@@ -256,8 +284,55 @@ new class extends Component
         <flux:subheading>{{ __('Verwalte seitenweite Einstellungen wie Header und Branding') }}</flux:subheading>
     </div>
 
-    <x-page-settings.layout :heading="__('Media Verwaltung')" :subheading="__('Verwalte Header und Frontpage Logo Konfigurationen')">
+    <x-page-settings.layout :heading="__('Dashboard')" :subheading="__('Verwalte Dashboard-Einstellungen und Media-Konfigurationen')">
         <div class="space-y-6">
+            <!-- Dashboard Settings -->
+            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <flux:heading size="md" class="mb-4">{{ __('Match-Anzeige Einstellungen') }}</flux:heading>
+                <flux:subheading class="mb-6">{{ __('Konfiguriere die Anzahl der anzuzeigenden Matches im Dashboard') }}</flux:subheading>
+
+                <form wire:submit="saveDashboardSettings" class="space-y-4">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <flux:input
+                            wire:model="latestMatchesCount"
+                            type="number"
+                            :label="__('Anzahl Latest Matches')"
+                            min="1"
+                            max="100"
+                            required
+                        />
+                        <flux:input
+                            wire:model="runningMatchesCount"
+                            type="number"
+                            :label="__('Anzahl Running Matches')"
+                            min="1"
+                            max="100"
+                            required
+                        />
+                        <flux:input
+                            wire:model="upcomingMatchesCount"
+                            type="number"
+                            :label="__('Anzahl Upcoming Matches')"
+                            min="1"
+                            max="100"
+                            required
+                        />
+                    </div>
+
+                    <div class="flex justify-end">
+                        <flux:button type="submit" variant="primary" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="saveDashboardSettings">{{ __('Speichern') }}</span>
+                            <span wire:loading wire:target="saveDashboardSettings">{{ __('Wird gespeichert...') }}</span>
+                        </flux:button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Media Verwaltung -->
+            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <flux:heading size="md" class="mb-4">{{ __('Media Verwaltung') }}</flux:heading>
+                <flux:subheading class="mb-6">{{ __('Verwalte Header und Frontpage Logo Konfigurationen') }}</flux:subheading>
+
             <!-- Tabs -->
             <flux:tabs wire:model="activeTab">
                 <flux:tab name="headers">{{ __('Header') }}</flux:tab>
@@ -420,6 +495,7 @@ new class extends Component
                         </tbody>
                     </table>
                 </div>
+            </div>
             </div>
         </div>
     </x-page-settings.layout>

@@ -17,10 +17,16 @@
             </div>
         @endif
 
+        {{-- Obere 3er Grid: Latest, Running, Upcoming --}}
+        <div class="grid auto-rows-min gap-4 md:grid-cols-3">
+            <livewire:matches.latest />
+            <livewire:matches.running />
+            <livewire:matches.upcoming />
+        </div>
+
+        {{-- Untere 3er Grid: Downloads --}}
         <div class="grid auto-rows-min gap-4 md:grid-cols-3">
             <x-downloads.latest />
-            <livewire:matches.running />
-            <livewire:matches.latest />
         </div>
 
         <div class="relative h-full flex-1 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700">

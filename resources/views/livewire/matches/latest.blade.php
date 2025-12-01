@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DartMatch;
+use App\Services\SettingsService;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -16,6 +17,7 @@ new class extends Component {
 
     public function with(): array
     {
+        $limit = SettingsService::getLatestMatchesCount();
         $totalCount = DartMatch::query()->finished()->count();
 
         $matches = DartMatch::query()
@@ -27,12 +29,13 @@ new class extends Component {
             ])
             ->orderByDesc('finished_at')
             ->orderByDesc('id')
-            ->limit(5)
+            ->limit($limit)
             ->get();
 
         return [
             'matches' => $matches,
             'totalCount' => $totalCount,
+            'limit' => $limit,
         ];
     }
 }; ?>
@@ -122,7 +125,7 @@ new class extends Component {
             @endforelse
         </div>
 
-        @if ($totalCount > 5)
+        @if ($totalCount > $limit)
             <div class="border-t border-neutral-200 bg-neutral-50 px-6 py-3 dark:border-neutral-700 dark:bg-zinc-800">
                 <a
                     href="{{ route('matches.index') }}"

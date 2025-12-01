@@ -7,12 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
 {
-    /** @use HasFactory<\Database\Factories\SettingFactory> */
     use HasFactory;
 
     protected $fillable = [
         'key',
         'value',
+    ];
+
+    protected $casts = [
+        'value' => 'string',
     ];
 
     /**
@@ -22,7 +25,11 @@ class Setting extends Model
     {
         $setting = static::where('key', $key)->first();
 
-        return $setting?->value ?? $default;
+        if (! $setting) {
+            return $default;
+        }
+
+        return $setting->value;
     }
 
     /**
@@ -32,7 +39,7 @@ class Setting extends Model
     {
         static::updateOrCreate(
             ['key' => $key],
-            ['value' => $value]
+            ['value' => (string) $value]
         );
     }
 }
