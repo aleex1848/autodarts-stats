@@ -211,6 +211,9 @@ new class extends Component {
                         {{ __('E-Mail') }}
                     </th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                        {{ __('Player') }}
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
                         {{ __('Rollen') }}
                     </th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
@@ -226,6 +229,15 @@ new class extends Component {
                         </td>
                         <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
                             {{ $user->email }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
+                            @if ($user->player)
+                                <flux:badge size="sm" variant="subtle">
+                                    {{ $user->player->name }}
+                                </flux:badge>
+                            @else
+                                <span class="text-zinc-400 dark:text-zinc-500">{{ __('Kein Player') }}</span>
+                            @endif
                         </td>
                         <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
                             <div class="flex flex-wrap gap-2">
@@ -253,7 +265,7 @@ new class extends Component {
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4" class="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                        <td colspan="5" class="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
                             {{ __('Keine Benutzer vorhanden.') }}
                         </td>
                     </tr>
