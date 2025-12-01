@@ -25,23 +25,22 @@ new class extends Component {
             'users' => User::query()->with(['roles', 'player'])->orderBy('name')->get(),
             'availableRoles' => Role::query()->orderBy('name')->get(),
             'players' => Player::query()
-                ->when($this->playerSearch !== '', function ($query) {
-                    $search = '%' . $this->playerSearch . '%';
-
-                    $query->where(function ($query) use ($search) {
-                        $query->where('name', 'like', $search)
-                            ->orWhere('email', 'like', $search);
-                    });
-                })
                 ->where(function ($query) {
+                    // Show unlinked players
                     $query->whereNull('user_id');
 
+                    // Also show the currently linked player when editing
                     if ($this->editingUserId) {
                         $query->orWhere('user_id', $this->editingUserId);
                     }
+                    
+                    // Also include the selected player if one is selected (for display purposes)
+                    if ($this->selectedPlayerId) {
+                        $query->orWhere('id', $this->selectedPlayerId);
+                    }
                 })
                 ->orderBy('name')
-                ->limit(20)
+                ->limit(100)
                 ->get(),
         ];
     }
@@ -64,13 +63,7 @@ new class extends Component {
             'selectedPlayerId' => [
                 'nullable',
                 'integer',
-                Rule::exists(Player::class, 'id')->where(function ($query) {
-                    $query->whereNull('user_id');
-
-                    if ($this->editingUserId) {
-                        $query->orWhere('user_id', $this->editingUserId);
-                    }
-                }),
+                Rule::exists(Player::class, 'id'),
             ],
         ];
     }
@@ -119,14 +112,23 @@ new class extends Component {
 
         if ($this->selectedPlayerId) {
             if (! $currentPlayer || $currentPlayer->id !== $this->selectedPlayerId) {
+                // Unlink current player if exists
                 if ($currentPlayer) {
                     $currentPlayer->update(['user_id' => null]);
                 }
 
+                // Get the selected player and unlink it from any other user first
                 $player = Player::findOrFail($this->selectedPlayerId);
+                if ($player->user_id && $player->user_id !== $user->id) {
+                    // Player is linked to another user, unlink it first
+                    $player->update(['user_id' => null]);
+                }
+                
+                // Link the player to this user
                 $player->update(['user_id' => $user->id]);
             }
         } elseif ($currentPlayer) {
+            // Remove player link if no player is selected
             $currentPlayer->update(['user_id' => null]);
         }
 
@@ -179,7 +181,12 @@ new class extends Component {
 
     public function updatedSelectedPlayerId($playerId): void
     {
-        $this->selectedPlayerId = $playerId ? (int) $playerId : null;
+        // Handle empty string from clearable select
+        if ($playerId === '' || $playerId === null) {
+            $this->selectedPlayerId = null;
+        } else {
+            $this->selectedPlayerId = (int) $playerId;
+        }
     }
 
     protected function resetForm(): void
@@ -295,44 +302,41 @@ new class extends Component {
                 autocomplete="new-password"
             />
 
-            <flux:field>
-                <flux:label>{{ __('Player suchen') }}</flux:label>
-                <flux:input
-                    wire:model.live.debounce.300ms="playerSearch"
-                    type="search"
-                    icon="magnifying-glass"
-                    :placeholder="__('Player suchen...')"
-                />
-            </flux:field>
-
             <flux:select
                 wire:model="selectedPlayerId"
+                variant="listbox"
+                searchable
+                clearable
                 :label="__('Verknüpfter Player')"
-                :placeholder="__('Kein Player verknüpft')"
+                :placeholder="__('Player suchen...')"
             >
-                <option value="">{{ __('Kein Player') }}</option>
                 @forelse ($players as $player)
-                    <option value="{{ $player->id }}">
+                    <flux:select.option value="{{ $player->id }}">
                         {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
                         @if ($player->email)
                             ({{ $player->email }})
                         @endif
-                    </option>
+                    </flux:select.option>
                 @empty
-                    <option value="" disabled>{{ __('Keine passenden Player gefunden') }}</option>
+                    <flux:select.option value="" disabled>
+                        {{ __('Keine passenden Player gefunden') }}
+                    </flux:select.option>
                 @endforelse
             </flux:select>
 
-            <flux:select
+            <flux:pillbox
                 wire:model="selectedRoles"
                 :label="__('Rollen')"
-                multiple
-                required
+                searchable
+                :placeholder="__('Rollen auswählen...')"
+                :search:placeholder="__('Rollen suchen...')"
             >
                 @foreach ($availableRoles as $role)
-                    <option value="{{ $role->name }}">{{ $role->name }}</option>
+                    <flux:pillbox.option value="{{ $role->name }}">
+                        {{ $role->name }}
+                    </flux:pillbox.option>
                 @endforeach
-            </flux:select>
+            </flux:pillbox>
 
             <div class="flex justify-end gap-2">
                 <flux:button type="button" variant="ghost" wire:click="$set('showUserFormModal', false)">
