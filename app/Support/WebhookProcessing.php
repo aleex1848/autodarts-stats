@@ -253,6 +253,17 @@ class WebhookProcessing extends ProcessWebhookJob
                     $dartsThrown = isset($matchStats['dartsThrown']) ? (int) $matchStats['dartsThrown'] : null;
                 }
 
+                // Cricket-specific statistics
+                $mpr = null;
+                $first9MPR = null;
+                if (($payload['variant'] ?? $match->variant) === 'Cricket' && $matchStats) {
+                    // MPR (Marks Per Round) for Cricket
+                    $mpr = isset($matchStats['mpr']) ? round((float) $matchStats['mpr'], 2) : null;
+
+                    // First 9 MPR for Cricket
+                    $first9MPR = isset($matchStats['first9MPR']) ? round((float) $matchStats['first9MPR'], 2) : null;
+                }
+
                 // Sync pivot table with retry logic to handle race conditions
                 $this->syncMatchPlayerWithRetry($match, $player->id, [
                     'player_index' => $index,
@@ -267,6 +278,8 @@ class WebhookProcessing extends ProcessWebhookJob
                     'best_checkout_points' => $bestCheckoutPoints,
                     'total_180s' => $total180s ?? 0,
                     'darts_thrown' => $dartsThrown,
+                    'mpr' => $mpr,
+                    'first_9_mpr' => $first9MPR,
                 ]);
             }
 
@@ -1393,6 +1406,17 @@ class WebhookProcessing extends ProcessWebhookJob
             $checkoutHits = isset($legStats['checkoutsHit']) ? (int) $legStats['checkoutsHit'] : null;
             $bestCheckoutPoints = isset($legStats['checkoutPoints']) ? (int) $legStats['checkoutPoints'] : null;
 
+            // Cricket-specific statistics
+            $mpr = null;
+            $first9MPR = null;
+            if ($match->variant === 'Cricket') {
+                // MPR (Marks Per Round) for Cricket
+                $mpr = isset($legStats['mpr']) ? round((float) $legStats['mpr'], 2) : null;
+
+                // First 9 MPR for Cricket
+                $first9MPR = isset($legStats['first9MPR']) ? round((float) $legStats['first9MPR'], 2) : null;
+            }
+
             // Update or create leg_player record
             DB::table('leg_player')->updateOrInsert(
                 [
@@ -1408,6 +1432,8 @@ class WebhookProcessing extends ProcessWebhookJob
                     'checkout_attempts' => $checkoutAttempts,
                     'checkout_hits' => $checkoutHits,
                     'best_checkout_points' => $bestCheckoutPoints,
+                    'mpr' => $mpr,
+                    'first_9_mpr' => $first9MPR,
                     'updated_at' => now(),
                     'created_at' => DB::raw('COALESCE(created_at, NOW())'),
                 ]

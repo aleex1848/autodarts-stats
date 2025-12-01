@@ -60,6 +60,8 @@ class DartMatch extends Model
                 'total_180s',
                 'darts_thrown',
                 'busted_count',
+                'mpr',
+                'first_9_mpr',
             ])
             ->withTimestamps();
     }

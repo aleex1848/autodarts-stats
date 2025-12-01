@@ -137,6 +137,10 @@
                             <th class="px-4 py-3 text-left">{{ __('Checkout %') }}</th>
                             <th class="px-4 py-3 text-left">{{ __('BUST') }}</th>
                             <th class="px-4 py-3 text-left">{{ __('180er') }}</th>
+                        @elseif ($match->variant === 'Cricket')
+                            <th class="px-4 py-3 text-left">{{ __('MPR') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('First 9 MPR') }}</th>
+                            <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
                         @else
                             <th class="px-4 py-3 text-left">{{ __('Pfeile') }}</th>
                         @endif
@@ -215,6 +219,28 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3">{{ $player->pivot->total_180s ?? 0 }}</td>
+                            @elseif ($match->variant === 'Cricket')
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->mpr))
+                                        {{ number_format((float) $player->pivot->mpr, 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->first_9_mpr))
+                                        {{ number_format((float) $player->pivot->first_9_mpr, 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (! is_null($player->pivot->darts_thrown))
+                                        {{ $player->pivot->darts_thrown }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
                             @else
                                 <td class="px-4 py-3">
                                     @if (! is_null($player->pivot->darts_thrown))
@@ -236,7 +262,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $match->variant === 'X01' ? 12 : 5 }}" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                            <td colspan="{{ $match->variant === 'X01' ? 12 : ($match->variant === 'Cricket' ? 6 : 5) }}" class="px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                                 {{ __('Keine Spieler vorhanden.') }}
                             </td>
                         </tr>
@@ -331,6 +357,10 @@
                                                 <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
                                                 <th class="px-4 py-3 text-right">{{ __('Checkout %') }}</th>
                                                 <th class="px-4 py-3 text-right">{{ __('BUST') }}</th>
+                                            @elseif ($match->variant === 'Cricket')
+                                                <th class="px-4 py-3 text-right">{{ __('MPR') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('First 9 MPR') }}</th>
+                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
                                             @else
                                                 <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
                                             @endif
@@ -393,6 +423,28 @@
                                                             <span class="font-medium text-red-600 dark:text-red-400">{{ $player->pivot->busted_count }}</span>
                                                         @else
                                                             0
+                                                        @endif
+                                                    </td>
+                                                @elseif ($match->variant === 'Cricket')
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->mpr))
+                                                            {{ number_format((float) $player->pivot->mpr, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->first_9_mpr))
+                                                            {{ number_format((float) $player->pivot->first_9_mpr, 2, ',', '.') }}
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                        @if (! is_null($player->pivot->darts_thrown))
+                                                            {{ $player->pivot->darts_thrown }}
+                                                        @else
+                                                            —
                                                         @endif
                                                     </td>
                                                 @else

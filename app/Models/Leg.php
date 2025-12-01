@@ -57,6 +57,8 @@ class Leg extends Model
                 'checkout_hits',
                 'best_checkout_points',
                 'busted_count',
+                'mpr',
+                'first_9_mpr',
             ])
             ->withTimestamps();
     }
