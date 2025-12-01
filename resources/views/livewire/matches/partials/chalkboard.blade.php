@@ -9,6 +9,9 @@
     // Hole alle Spieler aus dem Match (sortiert nach player_index)
     $players = $leg->match->players->sortBy('pivot.player_index')->values();
     
+    // Anzahl der Spieler für dynamische Spalten
+    $playerCount = $players->count();
+    
     // Hilfsfunktion zum Formatieren von Wurf-Labels
     $formatThrowLabel = function ($throw) {
         if ($throw->multiplier == 0 || $throw->segment_number == 0) {
@@ -58,9 +61,9 @@
         <div class="bg-gradient-to-br from-slate-700 to-slate-800 p-6 dark:from-slate-800 dark:to-slate-900">
             @if ($turnsByRound->isNotEmpty())
                 <!-- Kreidetafel -->
-                <div class="mx-auto max-w-2xl rounded-lg border-2 border-slate-500/50 bg-slate-800 p-8 shadow-2xl dark:bg-slate-900">
+                <div class="mx-auto max-w-7xl rounded-lg border-2 border-slate-500/50 bg-slate-800 p-8 shadow-2xl dark:bg-slate-900">
                     <!-- Spieler-Header -->
-                    <div class="mb-6 grid grid-cols-2 gap-8 border-b-2 border-slate-500/50 pb-4">
+                    <div class="mb-6 grid gap-8 border-b-2 border-slate-500/50 pb-4" style="grid-template-columns: repeat({{ $playerCount }}, minmax(0, 1fr));">
                         @foreach ($players as $player)
                             <div class="text-center">
                                 <div class="text-base font-bold tracking-wide text-slate-200">
@@ -73,7 +76,7 @@
                     <!-- Runden -->
                     <div class="space-y-0">
                         @foreach ($turnsByRound as $roundNumber => $turns)
-                            <div class="grid grid-cols-2 gap-8 border-b border-slate-600/30 py-4">
+                            <div class="grid gap-8 border-b border-slate-600/30 py-4" style="grid-template-columns: repeat({{ $playerCount }}, minmax(0, 1fr));">
                                 <!-- Turns für jeden Spieler -->
                                 @foreach ($players as $player)
                                     @php
