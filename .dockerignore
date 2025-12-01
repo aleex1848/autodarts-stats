@@ -1,0 +1,63 @@
+# Composer
+/vendor
+/auth.json
+auth.json
+
+# Node
+/node_modules
+npm-debug.log
+yarn-error.log
+
+# Build artifacts (werden im Dockerfile separat kopiert)
+/public/build
+/public/hot
+
+# Storage (sollte im Container leer sein oder über Volumes gemountet werden)
+/storage/*.key
+/storage/pail
+/storage/logs
+/storage/framework/cache
+/storage/framework/sessions
+/storage/framework/views
+/storage/framework/testing
+
+# Environment files
+.env
+.env.backup
+.env.production
+.env.local
+.env.*.local
+
+# IDE
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+.phpactor.json
+
+# Testing
+/.phpunit.cache
+.phpunit.result.cache
+
+# Laravel
+Homestead.json
+Homestead.yaml
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+.dockerignore
+docker-compose*.yml
+docker-compose*.yaml
+Dockerfile*
+
+# Documentation
+README.md
+*.md
+
+# CI/CD
+.github

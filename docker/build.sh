@@ -13,6 +13,21 @@ trap cleanup SIGINT SIGTERM
 
 echo "=== Docker Build Script ==="
 
+# Parse Kommandozeilen-Argumente
+BUILD_TYPE="both"
+if [ "$1" = "--dev" ]; then
+    BUILD_TYPE="dev"
+elif [ "$1" = "--prod" ]; then
+    BUILD_TYPE="prod"
+elif [ ! -z "$1" ]; then
+    echo "Unbekannter Parameter: $1"
+    echo "Verwendung: $0 [--dev|--prod]"
+    echo "  --dev:  Nur Development-Build (mit Dev-Dependencies)"
+    echo "  --prod: Nur Production-Build (ohne Dev-Dependencies)"
+    echo "  (ohne Parameter: Beide Builds)"
+    exit 1
+fi
+
 # Lade .env Datei (vom Root-Verzeichnis des Projekts)
 # In CI/CD-Umgebungen werden die Variablen als Environment-Variablen gesetzt
 if [ -f "../../.env" ]; then
@@ -64,14 +79,56 @@ echo "Build-Context: $(pwd)"
 echo "Dockerfile: docker/Dockerfile"
 echo ""
 
-# Docker Build mit Build-Args und Progress-Ausgabe
-docker build --progress=plain "${BUILD_ARGS[@]}" -t ghcr.io/aleex1848/autodarts-stats:latest -f docker/Dockerfile .
+# Funktion zum Erstellen eines Builds
+build_image() {
+    local install_dev_deps=$1
+    local tag=$2
+    local build_name=$3
+    
+    echo "=== $build_name Build ==="
+    echo "INSTALL_DEV_DEPS=$install_dev_deps"
+    echo "Tag: $tag"
+    echo ""
+    
+    docker build --progress=plain \
+        "${BUILD_ARGS[@]}" \
+        --build-arg "INSTALL_DEV_DEPS=$install_dev_deps" \
+        -t "$tag" \
+        -f docker/Dockerfile .
+    
+    echo ""
+    echo "$build_name Build erfolgreich!"
+    echo ""
+}
 
-echo ""
-echo "Build erfolgreich! Starte Push..."
+# Funktion zum Pushen eines Images
+push_image() {
+    local tag=$1
+    echo "Starte Push für $tag..."
+    docker push "$tag"
+    echo "Push erfolgreich!"
+    echo ""
+}
+
+# Erstelle Builds basierend auf BUILD_TYPE
+if [ "$BUILD_TYPE" = "dev" ] || [ "$BUILD_TYPE" = "both" ]; then
+    build_image "true" "ghcr.io/aleex1848/autodarts-stats:dev" "Development"
+fi
+
+if [ "$BUILD_TYPE" = "prod" ] || [ "$BUILD_TYPE" = "both" ]; then
+    build_image "false" "ghcr.io/aleex1848/autodarts-stats:latest" "Production"
+fi
+
+echo "=== Starte Push ==="
 echo ""
 
-docker push ghcr.io/aleex1848/autodarts-stats:latest
+# Pushe Images basierend auf BUILD_TYPE
+if [ "$BUILD_TYPE" = "dev" ] || [ "$BUILD_TYPE" = "both" ]; then
+    push_image "ghcr.io/aleex1848/autodarts-stats:dev"
+fi
 
-echo ""
+if [ "$BUILD_TYPE" = "prod" ] || [ "$BUILD_TYPE" = "both" ]; then
+    push_image "ghcr.io/aleex1848/autodarts-stats:latest"
+fi
+
 echo "=== Fertig ==="

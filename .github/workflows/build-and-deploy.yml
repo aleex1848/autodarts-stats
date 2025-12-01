@@ -39,6 +39,7 @@ jobs:
             FLUXUI_MAIL=${{ secrets.FLUXUI_MAIL }}
             FLUXUI_KEY=${{ secrets.FLUXUI_KEY }}
             REVERB_HOST=${{ secrets.REVERB_HOST }}
+            INSTALL_DEV_DEPS=false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Progress-Ausgabe für bessere Sichtbarkeit aller Build-Schritte

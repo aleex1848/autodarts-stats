@@ -1,19 +1,29 @@
 FROM composer:2.9 AS vendor
 ARG FLUXUI_MAIL=myMail
 ARG FLUXUI_KEY=myKey
+ARG INSTALL_DEV_DEPS=false
 COPY database/ database/ 
 COPY composer.json composer.json
 COPY composer.lock composer.lock
 #in packages sind meine custom packages
 #COPY packages/ packages/ 
 RUN composer config http-basic.composer.fluxui.dev $FLUXUI_MAIL $FLUXUI_KEY
-RUN composer install \
-    --ignore-platform-reqs \
-    --no-interaction \
-    --no-plugins \
-    --no-scripts \
-    --prefer-dist \
-    --no-dev
+RUN if [ "$INSTALL_DEV_DEPS" = "true" ]; then \
+        composer install \
+            --ignore-platform-reqs \
+            --no-interaction \
+            --no-plugins \
+            --no-scripts \
+            --prefer-dist; \
+    else \
+        composer install \
+            --ignore-platform-reqs \
+            --no-interaction \
+            --no-plugins \
+            --no-scripts \
+            --prefer-dist \
+            --no-dev; \
+    fi
 
 FROM node:25 AS frontend
 ARG REVERB_HOST=myHost
