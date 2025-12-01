@@ -1086,3 +1086,5 @@ Erstelle Tests für:
 6. **Performance**: Webhooks sollten asynchron über Queues verarbeitet werden.
 
 Dieser Prompt enthält alle notwendigen Informationen zur Implementierung des Systems. Die vollständige `WebhookProcessing` Klasse ist sehr umfangreich (~1600 Zeilen) und sollte basierend auf dem Original-Code implementiert werden, wobei alle hier beschriebenen Logiken berücksichtigt werden.
+
+

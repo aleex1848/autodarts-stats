@@ -29,6 +29,7 @@ class DartMatch extends Model
         'winner_player_id',
         'started_at',
         'finished_at',
+        'is_incomplete',
     ];
 
     protected function casts(): array
@@ -36,6 +37,7 @@ class DartMatch extends Model
         return [
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'is_incomplete' => 'boolean',
         ];
     }
 
@@ -94,6 +96,12 @@ class DartMatch extends Model
 
     public function scopeOngoing(Builder $query): void
     {
-        $query->whereNull('finished_at');
+        $query->whereNull('finished_at')
+            ->where('is_incomplete', false);
+    }
+
+    public function scopeIncomplete(Builder $query): void
+    {
+        $query->where('is_incomplete', true);
     }
 }

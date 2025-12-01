@@ -8,7 +8,7 @@
     // "remoteUser": "application",
     // "updateRemoteUserUID": false,
     // "overrideCommand": true,
-    "runServices": ["app", "mariadb", "redis", "phpmyadmin"],
+    "runServices": ["app", "mariadb", "redis", "phpmyadmin", "tools-proxy"],
     "shutdownAction": "stopCompose"
     // "mounts": [
     //   "source=${env:HOME}/.ssh,target=/home/application/.ssh,type=bind"
