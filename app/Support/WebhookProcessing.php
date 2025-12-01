@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Events\MatchUpdated;
 use App\Models\BullOff;
 use App\Models\DartMatch;
 use App\Models\DartThrow;
@@ -140,6 +141,9 @@ class WebhookProcessing extends ProcessWebhookJob
                 $throwData,
                 $throwData['throw']
             );
+
+            // Broadcast MatchUpdated event after processing throw
+            broadcast(new MatchUpdated($match->fresh()));
         });
 
         Log::debug('throw processed', [
@@ -326,6 +330,9 @@ class WebhookProcessing extends ProcessWebhookJob
             if (! isset($matchData['stats'])) {
                 $this->updatePlayerStatistics($match);
             }
+
+            // Broadcast MatchUpdated event after processing match_state
+            broadcast(new MatchUpdated($match->fresh()));
         });
 
         Log::debug('match_state processed', [

@@ -70,6 +70,28 @@ new class extends Component {
         }
     }
 
+    public function refreshMatch(): void
+    {
+        $this->match->refresh();
+        $this->match->load([
+            'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+            'winner',
+            'bullOffs.player',
+        ]);
+
+        $this->legs = $this->match->legs()
+            ->with([
+                'winner',
+                'legPlayers',
+                'turns' => fn ($query) => $query->orderBy('round_number'),
+                'turns.player',
+                'turns.throws' => fn ($query) => $query->orderBy('dart_number'),
+            ])
+            ->orderBy('set_number')
+            ->orderBy('leg_number')
+            ->get();
+    }
+
     public function with(): array
     {
         return [
@@ -117,4 +139,3 @@ new class extends Component {
         </flux:button>
     </div>
 </div>
-

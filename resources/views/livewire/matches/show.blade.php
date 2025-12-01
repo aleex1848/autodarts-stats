@@ -34,6 +34,13 @@ new class extends Component
 
     protected array $boardOrder = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
+    public function getListeners(): array
+    {
+        return [
+            "echo:match.{$this->match->id},.match.updated" => 'refreshMatch',
+        ];
+    }
+
     public function mount(DartMatch $match): void
     {
         $this->authorize('view', $match);
@@ -61,6 +68,34 @@ new class extends Component
             ?? optional($this->match->players->firstWhere('user_id', $user?->id))->id;
 
         $this->segmentOptions = range(1, 20);
+
+        $this->loadTargetAnalysis();
+    }
+
+    public function refreshMatch(): void
+    {
+        $this->match->refresh();
+        $this->match->load([
+            'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+            'winner',
+            'bullOffs.player',
+        ]);
+
+        $this->legs = $this->match->legs()
+            ->with([
+                'winner',
+                'legPlayers',
+                'turns' => fn ($query) => $query->orderBy('round_number'),
+                'turns.player',
+                'turns.throws' => fn ($query) => $query->orderBy('dart_number'),
+            ])
+            ->orderBy('set_number')
+            ->orderBy('leg_number')
+            ->get();
+
+        $user = Auth::user();
+        $this->playerId = $user?->player?->id
+            ?? optional($this->match->players->firstWhere('user_id', $user?->id))->id;
 
         $this->loadTargetAnalysis();
     }
@@ -338,4 +373,3 @@ new class extends Component
     </section>
 @endif
 </div>
-
