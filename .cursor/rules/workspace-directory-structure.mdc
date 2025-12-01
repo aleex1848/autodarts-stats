@@ -18,38 +18,32 @@ Die Laravel-Anwendung hat folgende Struktur:
 
 ## Pfad-Verwendung
 
-**KRITISCH:** Verwende IMMER relative Pfade vom Workspace-Root (`/app`), NICHT absolute Pfade mit `/app/app/` oder `/app/resources/`.
+**KRITISCH:** Verwende NIEMALS relative Pfade vom Workspace-Root (`/app`), NUR absolute Pfade mit `/app/app/` oder `/app/resources/`.
+
+### Falsche Pfade  (NICHT verwenden):
+- ❌ `resources/views/livewire/...`
+- ❌ `app/Models/User.php`
+- ❌ `config/app.php`
+- ❌ `routes/web.php`
+- ❌ `database/migrations/...`
 
 ### Korrekte Pfade:
-- ✅ `resources/views/livewire/...`
-- ✅ `app/Models/User.php`
-- ✅ `config/app.php`
-- ✅ `routes/web.php`
-- ✅ `database/migrations/...`
-
-### Falsche Pfade (NICHT verwenden):
-- ❌ `/app/resources/views/...`
-- ❌ `/app/app/Models/...`
-- ❌ `/app/config/...`
+- ✅ `/app/resources/views/...`
+- ✅ `/app/app/Models/...`
+- ✅ `/app/config/...`
 
 ## Laravel-spezifische Hinweise
 
 - Die `app/` Verzeichnisstruktur ist Standard-Laravel: `/app/app/` enthält den PHP-Code
-- Views liegen in `resources/views/`
-- Blade-Komponenten in `resources/views/components/`
-- Livewire-Komponenten in `resources/views/livewire/`
-- Models, Controllers, Services etc. in `app/`
+- Views liegen in `/app/resources/views/`
+- Blade-Komponenten in `/app/resources/views/components/`
+- Livewire-Komponenten in `/app/resources/views/livewire/`
+- Models, Controllers, Services etc. in `/app/app/`
 
-## Befehle
-
-Wenn du Dateien suchst oder auf Dateien zugreifst:
-1. Verwende relative Pfade vom Workspace-Root
-2. Beispiel: `find resources/views -name "*.blade.php"` statt `find /app/resources/views -name "*.blade.php"`
-3. Beispiel: `read_file("resources/views/livewire/settings/identify.blade.php")` statt `read_file("/app/resources/views/...")`
 
 ## Devcontainer
 
 Dieses Projekt läuft in einem Devcontainer mit:
 - Workspace-Root: `/app`
 - Laravel-Standardstruktur
-- Alle Pfade sind relativ zum Workspace-Root zu verwenden
+
