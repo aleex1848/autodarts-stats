@@ -17,7 +17,7 @@ class DartMatchFactory extends Factory
     public function definition(): array
     {
         return [
-            'autodarts_match_id' => fake()->uuid(),
+            'autodarts_match_id' => \fake()->uuid(),
             'variant' => 'X01',
             'type' => 'Online',
             'base_score' => 501,

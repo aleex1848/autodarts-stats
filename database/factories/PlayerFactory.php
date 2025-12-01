@@ -17,11 +17,11 @@ class PlayerFactory extends Factory
     public function definition(): array
     {
         return [
-            'autodarts_user_id' => fake()->uuid(),
-            'name' => fake()->name(),
-            'email' => fake()->optional()->safeEmail(),
-            'country' => fake()->optional()->countryCode(),
-            'avatar_url' => fake()->optional()->imageUrl(),
+            'autodarts_user_id' => \fake()->uuid(),
+            'name' => \fake()->name(),
+            'email' => \fake()->optional()->safeEmail(),
+            'country' => \fake()->optional()->countryCode(),
+            'avatar_url' => \fake()->optional()->imageUrl(),
         ];
     }
 }
