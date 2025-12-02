@@ -619,11 +619,34 @@ class WebhookProcessing extends ProcessWebhookJob
         }
 
         // Link the match to the fixture
-        $fixture->update([
-            'dart_match_id' => $match->id,
-            'status' => 'completed',
-            'played_at' => $match->started_at ?? now(),
-        ]);
+        // If match is finished, use AssignMatchToFixture to properly calculate legs, winner, and points
+        if ($match->finished_at !== null) {
+            try {
+                app(\App\Actions\AssignMatchToFixture::class)->handle($match, $fixture);
+            } catch (\Exception $e) {
+                Log::warning('Failed to assign match to fixture using AssignMatchToFixture', [
+                    'user_id' => $user->id,
+                    'matchday_id' => $matchday->id,
+                    'fixture_id' => $fixture->id,
+                    'match_id' => $match->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                // Fallback: just link the match without calculating stats
+                $fixture->update([
+                    'dart_match_id' => $match->id,
+                    'status' => 'completed',
+                    'played_at' => $match->started_at ?? now(),
+                ]);
+            }
+        } else {
+            // Match is not finished yet, just link it
+            // The fixture will be updated when the match finishes
+            $fixture->update([
+                'dart_match_id' => $match->id,
+                'played_at' => $match->started_at ?? now(),
+            ]);
+        }
 
         // Reset playing_matchday_id
         $user->update(['playing_matchday_id' => null]);
@@ -642,6 +665,7 @@ class WebhookProcessing extends ProcessWebhookJob
             'matchday_id' => $matchday->id,
             'fixture_id' => $fixture->id,
             'match_id' => $match->id,
+            'match_finished' => $match->finished_at !== null,
         ]);
     }
 

@@ -90,6 +90,36 @@ class MatchReprocessingService
                 'match_id' => $match->id,
                 'webhook_calls_processed' => $webhookCalls->count(),
             ]);
+
+            // If this match is assigned to a fixture, update the fixture after reprocessing
+            $fixture = \App\Models\MatchdayFixture::where('dart_match_id', $match->id)->first();
+            if ($fixture) {
+                // Refresh match to get latest data after reprocessing
+                $match->refresh();
+                $match->load('players');
+                
+                // Only update fixture if match is finished
+                if ($match->finished_at !== null) {
+                    try {
+                        app(\App\Actions\AssignMatchToFixture::class)->handle($match, $fixture);
+                        Log::info('Fixture updated after match reprocessing', [
+                            'fixture_id' => $fixture->id,
+                            'match_id' => $match->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to update fixture after match reprocessing', [
+                            'fixture_id' => $fixture->id,
+                            'match_id' => $match->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                } else {
+                    Log::debug('Match not finished after reprocessing, skipping fixture update', [
+                        'fixture_id' => $fixture->id,
+                        'match_id' => $match->id,
+                    ]);
+                }
+            }
         });
     }
 }

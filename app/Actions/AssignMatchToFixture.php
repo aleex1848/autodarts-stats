@@ -67,27 +67,27 @@ class AssignMatchToFixture
             'played_at' => $match->finished_at,
         ]);
 
-        // Update participant stats
-        $league = $fixture->matchday->league;
+        // Update participant stats for Season
+        $season = $fixture->matchday->season;
 
-        $homeParticipant = $league->participants()
+        $homeParticipant = $season->participants()
             ->where('player_id', $fixture->home_player_id)
             ->first();
 
-        $awayParticipant = $league->participants()
+        $awayParticipant = $season->participants()
             ->where('player_id', $fixture->away_player_id)
             ->first();
 
         if ($homeParticipant) {
-            $this->standingsCalculator->updateParticipantStats($homeParticipant);
+            $this->standingsCalculator->updateSeasonParticipantStats($homeParticipant, $season);
         }
 
         if ($awayParticipant) {
-            $this->standingsCalculator->updateParticipantStats($awayParticipant);
+            $this->standingsCalculator->updateSeasonParticipantStats($awayParticipant, $season);
         }
 
-        // Recalculate standings
-        $this->standingsCalculator->calculateStandings($league);
+        // Recalculate standings for Season
+        $this->standingsCalculator->calculateStandings($season);
 
         return true;
     }
