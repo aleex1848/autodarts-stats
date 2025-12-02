@@ -52,7 +52,7 @@
                                 if (!$user->relationLoaded('player')) {
                                     $user->load('player');
                                 }
-                                $userLeagues = $user->leagues();
+                                $userLeagues = $user->leagues()->load('seasons');
                             } else {
                                 $userLeagues = collect();
                             }
@@ -61,13 +61,28 @@
                         @if($userLeagues->isNotEmpty())
                             <flux:menu.group heading="Meine Ligen">
                                 @foreach($userLeagues as $league)
-                                    <flux:navmenu.item
-                                        :href="route('leagues.show', $league)"
-                                        :current="request()->routeIs('leagues.show', $league)"
-                                        wire:navigate
-                                    >
-                                        {{ $league->name }}
-                                    </flux:navmenu.item>
+                                    @php
+                                        $currentSeason = $league->seasons()
+                                            ->orderByDesc('created_at')
+                                            ->first();
+                                    @endphp
+                                    @if($currentSeason)
+                                        <flux:navmenu.item
+                                            :href="route('seasons.show', $currentSeason)"
+                                            :current="request()->routeIs('seasons.show', $currentSeason)"
+                                            wire:navigate
+                                        >
+                                            {{ $league->name }} ({{ $currentSeason->name ?? $currentSeason->slug }})
+                                        </flux:navmenu.item>
+                                    @else
+                                        <flux:navmenu.item
+                                            :href="route('leagues.show', $league)"
+                                            :current="request()->routeIs('leagues.show', $league)"
+                                            wire:navigate
+                                        >
+                                            {{ $league->name }}
+                                        </flux:navmenu.item>
+                                    @endif
                                 @endforeach
                             </flux:menu.group>
                         @endif
@@ -250,16 +265,34 @@
                     </flux:navlist.item>
                 </flux:navlist.group>
 
-                @if(auth()->user()->leagues()->isNotEmpty())
+                @php
+                    $userLeagues = auth()->user()->leagues()->load('seasons');
+                @endphp
+                @if($userLeagues->isNotEmpty())
                     <flux:navlist.group :heading="__('Meine Ligen')" expandable expanded class="grid">
-                        @foreach(auth()->user()->leagues() as $league)
-                            <flux:navlist.item
-                                :href="route('leagues.show', $league)"
-                                :current="request()->routeIs('leagues.show', $league)"
-                                wire:navigate
-                            >
-                                {{ $league->name }}
-                            </flux:navlist.item>
+                        @foreach($userLeagues as $league)
+                            @php
+                                $currentSeason = $league->seasons()
+                                    ->orderByDesc('created_at')
+                                    ->first();
+                            @endphp
+                            @if($currentSeason)
+                                <flux:navlist.item
+                                    :href="route('seasons.show', $currentSeason)"
+                                    :current="request()->routeIs('seasons.show', $currentSeason)"
+                                    wire:navigate
+                                >
+                                    {{ $league->name }} ({{ $currentSeason->name ?? $currentSeason->slug }})
+                                </flux:navlist.item>
+                            @else
+                                <flux:navlist.item
+                                    :href="route('leagues.show', $league)"
+                                    :current="request()->routeIs('leagues.show', $league)"
+                                    wire:navigate
+                                >
+                                    {{ $league->name }}
+                                </flux:navlist.item>
+                            @endif
                         @endforeach
                     </flux:navlist.group>
                 @endif
