@@ -34,6 +34,8 @@ class User extends Authenticatable
         'password',
         'is_identifying',
         'autodarts_name',
+        'discord_username',
+        'discord_id',
     ];
 
     /**
@@ -149,5 +151,17 @@ class User extends Authenticatable
         }
 
         return League::whereIn('id', $uniqueLeagueIds)->get();
+    }
+
+    /**
+     * Get the Discord profile URL for this user
+     */
+    public function discordProfileUrl(): ?string
+    {
+        if (! $this->discord_id) {
+            return null;
+        }
+
+        return "https://discord.com/users/{$this->discord_id}";
     }
 }

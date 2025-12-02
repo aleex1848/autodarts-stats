@@ -9,6 +9,8 @@ use Livewire\Volt\Component;
 new class extends Component {
     public string $name = '';
     public string $email = '';
+    public string $discordUsername = '';
+    public string $discordId = '';
 
     /**
      * Mount the component.
@@ -17,6 +19,8 @@ new class extends Component {
     {
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
+        $this->discordUsername = Auth::user()->discord_username ?? '';
+        $this->discordId = Auth::user()->discord_id ?? '';
     }
 
     /**
@@ -37,9 +41,16 @@ new class extends Component {
                 'max:255',
                 Rule::unique(User::class)->ignore($user->id)
             ],
+            'discordUsername' => ['nullable', 'string', 'max:255'],
+            'discordId' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $user->fill($validated);
+        $user->fill([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'discord_username' => $validated['discordUsername'] ?? null,
+            'discord_id' => $validated['discordId'] ?? null,
+        ]);
 
         if ($user->isDirty('email')) {
             $user->email_verified_at = null;
@@ -96,6 +107,41 @@ new class extends Component {
                         @endif
                     </div>
                 @endif
+            </div>
+
+            <div class="space-y-4">
+                <flux:input wire:model="discordUsername" :label="__('Discord Username (optional)')" type="text" autocomplete="username" />
+
+                <div>
+                    <flux:input wire:model="discordId" :label="__('Discord User ID (optional)')" type="text" autocomplete="off" />
+                    <flux:text class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        {{ __('Die Discord User ID wird automatisch gespeichert, wenn du dich über Discord einloggst. Du kannst sie auch manuell eingeben.') }}
+                    </flux:text>
+                    <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <flux:link href="{{ route('discord.redirect') }}" class="text-sm">
+                            {{ __('Mit Discord verknüpfen (automatisch)') }}
+                        </flux:link>
+                        <span class="hidden sm:inline text-gray-400">•</span>
+                        <flux:link href="https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID-" target="_blank" class="text-sm" rel="noopener noreferrer">
+                            {{ __('Wie finde ich meine Discord ID?') }}
+                        </flux:link>
+                    </div>
+                    @if(auth()->user()->discord_id)
+                        <flux:text class="mt-2 text-sm font-medium !dark:text-green-400 !text-green-600">
+                            {{ __('Discord ID ist gespeichert.') }}
+                            @if(auth()->user()->discordProfileUrl())
+                                <a href="{{ auth()->user()->discordProfileUrl() }}" target="_blank" rel="noopener noreferrer" class="underline">
+                                    {{ __('Profil ansehen') }}
+                                </a>
+                            @endif
+                        </flux:text>
+                    @endif
+                    @if(session('status') === 'discord-linked')
+                        <flux:text class="mt-2 text-sm font-medium !dark:text-green-400 !text-green-600">
+                            {{ __('Discord wurde erfolgreich verknüpft!') }}
+                        </flux:text>
+                    @endif
+                </div>
             </div>
 
             <div class="flex items-center gap-4">

@@ -18,6 +18,15 @@
                 :placeholder="__('Full name')"
             />
 
+            <!-- Discord Username -->
+            <flux:input
+                name="discord_username"
+                :label="__('Discord Username (optional)')"
+                type="text"
+                autocomplete="username"
+                :placeholder="__('Discord Username')"
+            />
+
             <!-- Email Address -->
             <flux:input
                 name="email"

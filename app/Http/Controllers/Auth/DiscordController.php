@@ -33,19 +33,65 @@ class DiscordController extends Controller
                 ]);
             }
 
+            $discordUsername = $discordUser->getNickname();
+            $discordId = $discordUser->getId();
+
+            // If user is already logged in, update their Discord info
+            if (Auth::check()) {
+                $user = Auth::user();
+                
+                // Update user name, discord_username and discord_id if they changed
+                $newName = $discordUser->getName() ?? $discordUsername;
+                $updateData = [];
+
+                if ($newName && $user->name !== $newName) {
+                    $updateData['name'] = $newName;
+                }
+
+                if ($discordUsername && $user->discord_username !== $discordUsername) {
+                    $updateData['discord_username'] = $discordUsername;
+                }
+
+                if ($discordId && $user->discord_id !== $discordId) {
+                    $updateData['discord_id'] = $discordId;
+                }
+
+                if (!empty($updateData)) {
+                    $user->update($updateData);
+                }
+
+                return redirect()->route('profile.edit')->with('status', 'discord-linked');
+            }
+
             // Find existing user by email or create a new one
             $user = User::firstOrCreate(
                 ['email' => $email],
                 [
-                    'name' => $discordUser->getName() ?? $discordUser->getNickname() ?? 'Discord User',
+                    'name' => $discordUser->getName() ?? $discordUsername ?? 'Discord User',
                     'email_verified_at' => now(),
+                    'discord_username' => $discordUsername,
+                    'discord_id' => $discordId,
                 ]
             );
 
-            // Update user name if it changed
-            $newName = $discordUser->getName() ?? $discordUser->getNickname();
+            // Update user name, discord_username and discord_id if they changed
+            $newName = $discordUser->getName() ?? $discordUsername;
+            $updateData = [];
+
             if ($newName && $user->name !== $newName) {
-                $user->update(['name' => $newName]);
+                $updateData['name'] = $newName;
+            }
+
+            if ($discordUsername && $user->discord_username !== $discordUsername) {
+                $updateData['discord_username'] = $discordUsername;
+            }
+
+            if ($discordId && $user->discord_id !== $discordId) {
+                $updateData['discord_id'] = $discordId;
+            }
+
+            if (!empty($updateData)) {
+                $user->update($updateData);
             }
 
             Auth::login($user, true);
