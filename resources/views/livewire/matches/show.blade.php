@@ -57,6 +57,11 @@ new class extends Component
             'fixture.awayPlayer.user',
             'fixture.winner',
         ]);
+        
+        // Ensure season is loaded for comparison
+        if ($this->match->fixture?->matchday?->season) {
+            $this->match->fixture->matchday->load('season');
+        }
 
         $this->legs = $match->legs()
             ->with([

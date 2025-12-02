@@ -81,36 +81,146 @@
         <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <flux:heading size="md">{{ __('Einstellungen') }}</flux:heading>
 
-            <dl class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-                <div class="flex justify-between">
-                    <dt class="font-medium text-zinc-500">{{ __('Variante') }}</dt>
-                    <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->variant ?? '—' }}</dd>
+            @php
+                $season = $match->fixture?->matchday?->season ?? null;
+                $isLeagueMatch = $season !== null;
+            @endphp
+
+            @if ($isLeagueMatch && $match->variant === 'X01')
+                {{-- Vergleichstabelle für Ligaspiele --}}
+                <div class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-200 dark:border-zinc-700">
+                                <th class="px-4 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">{{ __('Einstellung') }}</th>
+                                <th class="px-4 py-2 text-center font-medium text-zinc-500 dark:text-zinc-400">{{ __('Match') }}</th>
+                                <th class="px-4 py-2 text-center font-medium text-zinc-500 dark:text-zinc-400">{{ __('Season') }}</th>
+                                <th class="px-4 py-2 text-center font-medium text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-200 dark:divide-zinc-700">
+                            @php
+                                $settings = [
+                                    'base_score' => ['label' => __('Base Score'), 'match' => $match->base_score, 'season' => $season->base_score],
+                                    'in_mode' => ['label' => __('In Mode'), 'match' => $match->in_mode, 'season' => $season->in_mode],
+                                    'out_mode' => ['label' => __('Out Mode'), 'match' => $match->out_mode, 'season' => $season->out_mode],
+                                    'bull_mode' => ['label' => __('Bull Mode'), 'match' => $match->bull_mode, 'season' => $season->bull_mode],
+                                    'max_rounds' => ['label' => __('Max Rounds'), 'match' => $match->max_rounds, 'season' => $season->max_rounds],
+                                    'bull_off' => ['label' => __('Bull-Off'), 'match' => $match->bull_off, 'season' => $season->bull_off],
+                                ];
+                                
+                                // Match Mode Vergleich
+                                $matchModeMatch = null;
+                                $matchModeSeason = null;
+                                if ($match->match_mode_type === 'Legs' && $match->match_mode_legs_count) {
+                                    $matchModeMatch = __('Legs - First to :count leg', ['count' => $match->match_mode_legs_count]);
+                                } elseif ($match->match_mode_type === 'Sets' && $match->match_mode_sets_count) {
+                                    $matchModeMatch = __('Sets - First to :count sets', ['count' => $match->match_mode_sets_count]);
+                                    if ($match->match_mode_legs_count) {
+                                        $matchModeMatch .= ' · ' . __('First to :count leg', ['count' => $match->match_mode_legs_count]);
+                                    }
+                                } elseif ($match->match_mode_type) {
+                                    $matchModeMatch = $match->match_mode_type;
+                                }
+                                
+                                if ($season->match_mode_type === 'Legs' && $season->match_mode_legs_count) {
+                                    $matchModeSeason = __('Legs - First to :count leg', ['count' => $season->match_mode_legs_count]);
+                                } elseif ($season->match_mode_type === 'Sets' && $season->match_mode_sets_count) {
+                                    $matchModeSeason = __('Sets - First to :count sets', ['count' => $season->match_mode_sets_count]);
+                                    if ($season->match_mode_legs_count) {
+                                        $matchModeSeason .= ' · ' . __('First to :count leg', ['count' => $season->match_mode_legs_count]);
+                                    }
+                                } elseif ($season->match_mode_type) {
+                                    $matchModeSeason = $season->match_mode_type;
+                                }
+                                
+                                $settings['match_mode'] = ['label' => __('Match Mode'), 'match' => $matchModeMatch, 'season' => $matchModeSeason];
+                            @endphp
+                            
+                            @foreach ($settings as $key => $setting)
+                                @php
+                                    $matchValue = $setting['match'] ?? '—';
+                                    $seasonValue = $setting['season'] ?? '—';
+                                    $matches = $matchValue === $seasonValue && $matchValue !== '—' && $seasonValue !== '—';
+                                @endphp
+                                <tr>
+                                    <td class="px-4 py-2 font-medium text-zinc-900 dark:text-zinc-100">{{ $setting['label'] }}</td>
+                                    <td class="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{{ $matchValue }}</td>
+                                    <td class="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{{ $seasonValue }}</td>
+                                    <td class="px-4 py-2 text-center">
+                                        @if ($matches)
+                                            <flux:badge variant="success" size="sm">
+                                                <flux:icon name="check" class="h-3 w-3" />
+                                            </flux:badge>
+                                        @elseif ($matchValue !== '—' && $seasonValue !== '—')
+                                            <flux:badge variant="danger" size="sm">
+                                                <flux:icon name="x-mark" class="h-3 w-3 text-red-600 dark:text-red-400" />
+                                            </flux:badge>
+                                        @else
+                                            <span class="text-zinc-400">—</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
-                @if ($match->variant === 'X01')
+            @else
+                {{-- Einfache Anzeige für Nicht-Ligaspiele --}}
+                <dl class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
                     <div class="flex justify-between">
-                        <dt class="font-medium text-zinc-500">{{ __('Basisscore') }}</dt>
-                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->base_score ?? '—' }}</dd>
+                        <dt class="font-medium text-zinc-500">{{ __('Variante') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->variant ?? '—' }}</dd>
                     </div>
-                    <div class="flex justify-between">
-                        <dt class="font-medium text-zinc-500">{{ __('In-Mode') }}</dt>
-                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->in_mode ?? '—' }}</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="font-medium text-zinc-500">{{ __('Out-Mode') }}</dt>
-                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->out_mode ?? '—' }}</dd>
-                    </div>
-                    @if ($match->bullOffs->isNotEmpty())
+                    @if ($match->variant === 'X01')
                         <div class="flex justify-between">
-                            <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
-                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
+                            <dt class="font-medium text-zinc-500">{{ __('Basisscore') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->base_score ?? '—' }}</dd>
                         </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('In-Mode') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->in_mode ?? '—' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Out-Mode') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->out_mode ?? '—' }}</dd>
+                        </div>
+                        @if ($match->bullOffs->isNotEmpty())
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-500">{{ __('Bull-Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_mode ?? '—' }}</dd>
+                            </div>
+                        @endif
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Max. Runden') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->max_rounds ?? '—' }}</dd>
+                        </div>
+                        @if ($match->bull_off)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-500">{{ __('Bull-Off') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->bull_off }}</dd>
+                            </div>
+                        @endif
+                        @if ($match->match_mode_type)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-500">{{ __('Match Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">
+                                    @if ($match->match_mode_type === 'Legs' && $match->match_mode_legs_count)
+                                        {{ __('Legs - First to :count leg', ['count' => $match->match_mode_legs_count]) }}
+                                    @elseif ($match->match_mode_type === 'Sets' && $match->match_mode_sets_count)
+                                        {{ __('Sets - First to :count sets', ['count' => $match->match_mode_sets_count]) }}
+                                        @if ($match->match_mode_legs_count)
+                                            · {{ __('First to :count leg', ['count' => $match->match_mode_legs_count]) }}
+                                        @endif
+                                    @else
+                                        {{ $match->match_mode_type }}
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
                     @endif
-                    <div class="flex justify-between">
-                        <dt class="font-medium text-zinc-500">{{ __('Max. Runden') }}</dt>
-                        <dd class="text-zinc-900 dark:text-zinc-100">{{ $match->max_rounds ?? '—' }}</dd>
-                    </div>
-                @endif
-            </dl>
+                </dl>
+            @endif
         </div>
 
         @if ($match->fixture)

@@ -37,6 +37,17 @@ new class extends Component {
     public ?string $dashboard_badge_color = null;
     public $selectedCoAdmins = [];
     public string $coAdminSearch = '';
+    
+    // X01 Game Settings
+    public ?int $base_score = 501;
+    public ?string $in_mode = 'Straight';
+    public ?string $out_mode = 'Double';
+    public ?string $bull_mode = '25/50';
+    public ?int $max_rounds = 20;
+    public ?string $bull_off = 'Off';
+    public ?string $match_mode_type = 'Legs';
+    public ?int $match_mode_legs_count = 2;
+    public ?int $match_mode_sets_count = null;
 
     public function mount(Season $season): void
     {
@@ -54,6 +65,16 @@ new class extends Component {
         $this->status = $season->status;
         $this->dashboard_display_type = $season->dashboard_display_type ?? 'none';
         $this->dashboard_badge_color = $season->dashboard_badge_color;
+        // X01 Game Settings
+        $this->base_score = $season->base_score ?? 501;
+        $this->in_mode = $season->in_mode ?? 'Straight';
+        $this->out_mode = $season->out_mode ?? 'Double';
+        $this->bull_mode = $season->bull_mode ?? '25/50';
+        $this->max_rounds = $season->max_rounds ?? 20;
+        $this->bull_off = $season->bull_off ?? 'Off';
+        $this->match_mode_type = $season->match_mode_type ?? 'Legs';
+        $this->match_mode_legs_count = $season->match_mode_legs_count ?? 2;
+        $this->match_mode_sets_count = $season->match_mode_sets_count;
         // Initialisiere als String-Array, da Pillbox Strings sendet
         $this->selectedCoAdmins = $season->coAdmins->pluck('id')->map(fn($id) => (string) $id)->toArray();
     }
@@ -132,6 +153,28 @@ new class extends Component {
             'mode' => ['required', 'string'],
             'variant' => ['required', 'string'],
             'match_format' => ['required', 'string'],
+            'base_score' => ['nullable', 'integer', 'in:121,170,301,501,701,901'],
+            'in_mode' => ['nullable', 'string', 'in:Straight,Double,Master'],
+            'out_mode' => ['nullable', 'string', 'in:Straight,Double,Master'],
+            'bull_mode' => ['nullable', 'string', 'in:25/50,50/50'],
+            'max_rounds' => ['nullable', 'integer', 'in:15,20,50,80'],
+            'bull_off' => ['nullable', 'string', 'in:Off,Normal,Official'],
+            'match_mode_type' => ['nullable', 'string', 'in:Off,Legs,Sets'],
+            'match_mode_legs_count' => [
+                'nullable',
+                'required_if:match_mode_type,Legs',
+                'required_if:match_mode_type,Sets',
+                'integer',
+                function ($attribute, $value, $fail) {
+                    if ($this->match_mode_type === 'Legs' && ($value < 1 || $value > 11)) {
+                        $fail(__('Die Anzahl der Legs muss zwischen 1 und 11 liegen.'));
+                    }
+                    if ($this->match_mode_type === 'Sets' && !in_array($value, [2, 3])) {
+                        $fail(__('Bei Sets-Modus muss die Anzahl der Legs 2 oder 3 sein.'));
+                    }
+                },
+            ],
+            'match_mode_sets_count' => ['nullable', 'required_if:match_mode_type,Sets', 'integer', 'min:2', 'max:7'],
             'registration_deadline' => ['nullable', 'date'],
             'days_per_matchday' => ['required_if:matchday_schedule_mode,timed', 'nullable', 'integer', 'min:1', 'max:30'],
             'matchday_schedule_mode' => ['required', 'string'],
@@ -200,6 +243,15 @@ new class extends Component {
             'logo_path' => $logoPath,
             'dashboard_display_type' => $validated['dashboard_display_type'],
             'dashboard_badge_color' => $validated['dashboard_badge_color'] ?? null,
+            'base_score' => $validated['base_score'] ?? null,
+            'in_mode' => $validated['in_mode'] ?? null,
+            'out_mode' => $validated['out_mode'] ?? null,
+            'bull_mode' => $validated['bull_mode'] ?? null,
+            'max_rounds' => $validated['max_rounds'] ?? null,
+            'bull_off' => $validated['bull_off'] ?? null,
+            'match_mode_type' => $validated['match_mode_type'] ?? null,
+            'match_mode_legs_count' => $validated['match_mode_legs_count'] ?? null,
+            'match_mode_sets_count' => $validated['match_mode_sets_count'] ?? null,
         ]);
 
         // Sync Co-Admins - konvertiere zu Integer-Array für die Datenbank
@@ -348,38 +400,6 @@ new class extends Component {
                 </flux:select>
 
                 <flux:select
-                    wire:model="variant"
-                    :label="__('Spielvariante')"
-                    required
-                >
-                    @foreach ($variants as $variantOption)
-                        <option value="{{ $variantOption->value }}" {{ $variant === $variantOption->value ? 'selected' : '' }}>
-                            {{ match($variantOption->value) {
-                                '501_single_single' => __('501 Single-In Single-Out'),
-                                '501_single_double' => __('501 Single-In Double-Out'),
-                                default => $variantOption->name
-                            } }}
-                        </option>
-                    @endforeach
-                </flux:select>
-
-                <flux:select
-                    wire:model="match_format"
-                    :label="__('Spiellänge')"
-                    required
-                >
-                    @foreach ($formats as $format)
-                        <option value="{{ $format->value }}" {{ $match_format === $format->value ? 'selected' : '' }}>
-                            {{ match($format->value) {
-                                'best_of_3' => __('Best of 3'),
-                                'best_of_5' => __('Best of 5'),
-                                default => $format->name
-                            } }}
-                        </option>
-                    @endforeach
-                </flux:select>
-
-                <flux:select
                     wire:model="status"
                     :label="__('Status')"
                     required
@@ -390,6 +410,130 @@ new class extends Component {
                         </option>
                     @endforeach
                 </flux:select>
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <flux:heading size="lg" class="mb-4">{{ __('X01 Spieleinstellungen') }}</flux:heading>
+
+            <div class="space-y-6">
+                <div>
+                    <flux:radio.group wire:model="base_score" variant="buttons" class="w-full *:flex-1" :label="__('Base Score')">
+                        @foreach ([121, 170, 301, 501, 701, 901] as $score)
+                            <flux:radio :value="$score">{{ $score }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('base_score')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model="in_mode" variant="buttons" class="w-full *:flex-1" :label="__('In Mode')">
+                        @foreach (['Straight', 'Double', 'Master'] as $mode)
+                            <flux:radio :value="$mode">{{ $mode }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('in_mode')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model="out_mode" variant="buttons" class="w-full *:flex-1" :label="__('Out Mode')">
+                        @foreach (['Straight', 'Double', 'Master'] as $mode)
+                            <flux:radio :value="$mode">{{ $mode }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('out_mode')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model="max_rounds" variant="buttons" class="w-full *:flex-1" :label="__('Max Rounds')">
+                        @foreach ([15, 20, 50, 80] as $rounds)
+                            <flux:radio :value="$rounds">{{ $rounds }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('max_rounds')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model="bull_mode" variant="buttons" class="w-full *:flex-1" :label="__('Bull Mode')">
+                        @foreach (['25/50', '50/50'] as $bullMode)
+                            <flux:radio :value="$bullMode">{{ $bullMode }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('bull_mode')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model="bull_off" variant="buttons" class="w-full *:flex-1" :label="__('Bull-Off')">
+                        @foreach (['Off', 'Normal', 'Official'] as $bullOff)
+                            <flux:radio :value="$bullOff">{{ $bullOff }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('bull_off')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:radio.group wire:model.live="match_mode_type" variant="buttons" class="w-full *:flex-1" :label="__('Match Mode')">
+                        @foreach (['Off', 'Legs', 'Sets'] as $matchMode)
+                            <flux:radio :value="$matchMode">{{ $matchMode }}</flux:radio>
+                        @endforeach
+                    </flux:radio.group>
+                    @error('match_mode_type')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+
+                        @if ($match_mode_type === 'Legs')
+                            <div class="mt-3">
+                                <flux:select wire:model="match_mode_legs_count" :label="__('First to X legs')">
+                                    @foreach (range(1, 11) as $legs)
+                                        <option value="{{ $legs }}" {{ $match_mode_legs_count == $legs ? 'selected' : '' }}>
+                                            {{ __('First to :count leg', ['count' => $legs]) }}
+                                        </option>
+                                    @endforeach
+                                </flux:select>
+                                @error('match_mode_legs_count')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @endif
+
+                        @if ($match_mode_type === 'Sets')
+                            <div class="mt-3 space-y-3">
+                                <flux:select wire:model="match_mode_sets_count" :label="__('First to X sets')">
+                                    @foreach (range(2, 7) as $sets)
+                                        <option value="{{ $sets }}" {{ $match_mode_sets_count == $sets ? 'selected' : '' }}>
+                                            {{ __('First to :count sets', ['count' => $sets]) }}
+                                        </option>
+                                    @endforeach
+                                </flux:select>
+                                @error('match_mode_sets_count')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+
+                                <flux:select wire:model="match_mode_legs_count" :label="__('First to X legs')">
+                                    @foreach ([2, 3] as $legs)
+                                        <option value="{{ $legs }}" {{ $match_mode_legs_count == $legs ? 'selected' : '' }}>
+                                            {{ __('First to :count', ['count' => $legs]) }}
+                                        </option>
+                                    @endforeach
+                                </flux:select>
+                                @error('match_mode_legs_count')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @endif
+                </div>
             </div>
         </div>
 

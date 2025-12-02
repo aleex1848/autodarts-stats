@@ -189,14 +189,81 @@ class WebhookProcessing extends ProcessWebhookJob
             );
 
             // Update match settings
+            $updateData = [];
+            
             if (isset($matchData['settings'])) {
-                $match->update([
+                $updateData = [
                     'base_score' => $matchData['settings']['baseScore'] ?? 501,
                     'in_mode' => $matchData['settings']['inMode'] ?? 'Straight',
                     'out_mode' => $matchData['settings']['outMode'] ?? 'Straight',
                     'bull_mode' => $matchData['settings']['bullMode'] ?? '25/50',
                     'max_rounds' => $matchData['settings']['maxRounds'] ?? 20,
-                ]);
+                ];
+            }
+
+            // Extract bull_off from settings or derive from gameScores
+            if (isset($matchData['settings']['bullOff'])) {
+                $updateData['bull_off'] = $matchData['settings']['bullOff'];
+            } elseif (isset($matchData['gameScores']) && is_array($matchData['gameScores'])) {
+                // Check if gameScores contains negative values (indicates Bull-Off enabled)
+                $hasNegativeScores = false;
+                foreach ($matchData['gameScores'] as $score) {
+                    if ($score < 0) {
+                        $hasNegativeScores = true;
+                        break;
+                    }
+                }
+                // Also check stats for bullDistance
+                $hasBullOff = $hasNegativeScores;
+                if (! $hasBullOff && isset($matchData['stats']) && is_array($matchData['stats'])) {
+                    foreach ($matchData['stats'] as $stat) {
+                        $bullDistance = $stat['legStats']['bullDistance'] ?? $stat['matchStats']['bullDistance'] ?? null;
+                        if ($bullDistance !== null) {
+                            $hasBullOff = true;
+                            break;
+                        }
+                    }
+                }
+                // Default to 'Off' if no indicators found, otherwise 'Normal'
+                $updateData['bull_off'] = $hasBullOff ? 'Normal' : 'Off';
+            }
+
+            // Extract match mode from settings or derive from legs/sets structure
+            if (isset($matchData['settings']['matchMode'])) {
+                $matchMode = $matchData['settings']['matchMode'];
+                if ($matchMode === 'Off') {
+                    $updateData['match_mode_type'] = 'Off';
+                } elseif ($matchMode === 'Legs' || isset($matchData['settings']['legsToWin'])) {
+                    $updateData['match_mode_type'] = 'Legs';
+                    $updateData['match_mode_legs_count'] = $matchData['settings']['legsToWin'] ?? null;
+                } elseif ($matchMode === 'Sets' || isset($matchData['settings']['setsToWin'])) {
+                    $updateData['match_mode_type'] = 'Sets';
+                    $updateData['match_mode_sets_count'] = $matchData['settings']['setsToWin'] ?? null;
+                }
+            } else {
+                // Derive from match structure: if sets > 1, it's Sets mode, otherwise Legs
+                $maxSets = 0;
+                $maxLegs = 0;
+                if (isset($matchData['scores']) && is_array($matchData['scores'])) {
+                    foreach ($matchData['scores'] as $score) {
+                        $maxSets = max($maxSets, $score['sets'] ?? 0);
+                        $maxLegs = max($maxLegs, $score['legs'] ?? 0);
+                    }
+                }
+                
+                if ($maxSets > 0) {
+                    $updateData['match_mode_type'] = 'Sets';
+                    $updateData['match_mode_sets_count'] = $maxSets;
+                } elseif ($maxLegs > 0) {
+                    $updateData['match_mode_type'] = 'Legs';
+                    $updateData['match_mode_legs_count'] = $maxLegs;
+                } else {
+                    $updateData['match_mode_type'] = 'Off';
+                }
+            }
+
+            if (! empty($updateData)) {
+                $match->update($updateData);
             }
 
             // Sync players FIRST

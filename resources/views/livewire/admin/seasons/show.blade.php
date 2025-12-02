@@ -340,27 +340,65 @@ new class extends Component {
                         </dd>
                     </div>
 
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Spielvariante') }}</dt>
-                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {{ match($season->variant) {
-                                '501_single_single' => '501 Single-In Single-Out',
-                                '501_single_double' => '501 Single-In Double-Out',
-                                default => $season->variant
-                            } }}
-                        </dd>
-                    </div>
+                    @if ($season->base_score)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Base Score') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->base_score }}</dd>
+                        </div>
+                    @endif
 
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Spiellänge') }}</dt>
-                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {{ match($season->match_format) {
-                                'best_of_3' => 'Best of 3',
-                                'best_of_5' => 'Best of 5',
-                                default => $season->match_format
-                            } }}
-                        </dd>
-                    </div>
+                    @if ($season->in_mode)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('In Mode') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->in_mode }}</dd>
+                        </div>
+                    @endif
+
+                    @if ($season->out_mode)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Out Mode') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->out_mode }}</dd>
+                        </div>
+                    @endif
+
+                    @if ($season->bull_mode)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Bull Mode') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->bull_mode }}</dd>
+                        </div>
+                    @endif
+
+                    @if ($season->max_rounds)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Max Rounds') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->max_rounds }}</dd>
+                        </div>
+                    @endif
+
+                    @if ($season->bull_off)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Bull-Off') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{{ $season->bull_off }}</dd>
+                        </div>
+                    @endif
+
+                    @if ($season->match_mode_type)
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Match Mode') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                @if ($season->match_mode_type === 'Legs' && $season->match_mode_legs_count)
+                                    {{ __('Legs - First to :count leg', ['count' => $season->match_mode_legs_count]) }}
+                                @elseif ($season->match_mode_type === 'Sets' && $season->match_mode_sets_count)
+                                    {{ __('Sets - First to :count sets', ['count' => $season->match_mode_sets_count]) }}
+                                    @if ($season->match_mode_legs_count)
+                                        · {{ __('First to :count leg', ['count' => $season->match_mode_legs_count]) }}
+                                    @endif
+                                @else
+                                    {{ $season->match_mode_type }}
+                                @endif
+                            </dd>
+                        </div>
+                    @endif
 
                     <div>
                         <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Tage pro Spieltag') }}</dt>

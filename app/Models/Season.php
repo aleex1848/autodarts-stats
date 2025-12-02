@@ -32,6 +32,15 @@ class Season extends Model
         'dashboard_badge_color',
         'parent_season_id',
         'created_by_user_id',
+        'base_score',
+        'in_mode',
+        'out_mode',
+        'bull_mode',
+        'max_rounds',
+        'bull_off',
+        'match_mode_type',
+        'match_mode_legs_count',
+        'match_mode_sets_count',
     ];
 
     protected function casts(): array
@@ -41,6 +50,10 @@ class Season extends Model
             'max_players' => 'integer',
             'days_per_matchday' => 'integer',
             'matchday_schedule_mode' => MatchdayScheduleMode::class,
+            'base_score' => 'integer',
+            'max_rounds' => 'integer',
+            'match_mode_legs_count' => 'integer',
+            'match_mode_sets_count' => 'integer',
         ];
     }
 

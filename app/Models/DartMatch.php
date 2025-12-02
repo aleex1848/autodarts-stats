@@ -26,6 +26,10 @@ class DartMatch extends Model
         'out_mode',
         'bull_mode',
         'max_rounds',
+        'bull_off',
+        'match_mode_type',
+        'match_mode_legs_count',
+        'match_mode_sets_count',
         'winner_player_id',
         'started_at',
         'finished_at',
@@ -38,6 +42,10 @@ class DartMatch extends Model
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'is_incomplete' => 'boolean',
+            'base_score' => 'integer',
+            'max_rounds' => 'integer',
+            'match_mode_legs_count' => 'integer',
+            'match_mode_sets_count' => 'integer',
         ];
     }
 
