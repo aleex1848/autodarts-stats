@@ -408,10 +408,27 @@ class WebhookProcessing extends ProcessWebhookJob
             }
         }
 
-        // Find the player that is not a bot (doesn't have "Bot Level" in name)
+        // Check if user has provided an autodarts name
+        if (empty($user->autodarts_name)) {
+            $user->update(['is_identifying' => false]);
+            broadcast(new PlayerIdentified(
+                $user,
+                null,
+                false,
+                'Bitte gib zuerst deinen AutoDarts-Namen in den Einstellungen ein.'
+            ));
+
+            return;
+        }
+
+        // Find the player that matches the user's autodarts name
         $nonBotPlayer = null;
+        // Normalize: trim and replace multiple spaces with single space
+        $expectedName = preg_replace('/\s+/', ' ', trim($user->autodarts_name));
+        
         foreach ($matchData['players'] as $playerData) {
-            $playerName = $playerData['name'] ?? '';
+            // Normalize: trim and replace multiple spaces with single space
+            $playerName = preg_replace('/\s+/', ' ', trim($playerData['name'] ?? ''));
             $userId = $playerData['userId'] ?? null;
 
             // Skip bots (name starts with "Bot Level" or no userId)
@@ -421,6 +438,11 @@ class WebhookProcessing extends ProcessWebhookJob
 
             // Check if this is a bot UUID (starts with 00000000)
             if (str_starts_with($userId, '00000000-0000-0000')) {
+                continue;
+            }
+
+            // Check if the player name matches the expected name (case-insensitive)
+            if (strcasecmp($playerName, $expectedName) !== 0) {
                 continue;
             }
 
@@ -439,7 +461,7 @@ class WebhookProcessing extends ProcessWebhookJob
                 $user,
                 null,
                 false,
-                'Kein passender Spieler gefunden. Bitte stelle sicher, dass du gegen einen Bot spielst und dein Autodarts-Account korrekt ist.'
+                "Kein Spieler mit dem Namen '{$expectedName}' gefunden. Bitte stelle sicher, dass du gegen einen Bot spielst und dein AutoDarts-Name korrekt eingegeben wurde."
             ));
 
             return;

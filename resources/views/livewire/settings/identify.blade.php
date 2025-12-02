@@ -11,6 +11,7 @@ new class extends Component
     public bool $success = false;
     public ?int $playerId = null;
     public ?string $playerName = null;
+    public string $autodartsName = '';
 
     /**
      * Mount the component.
@@ -37,6 +38,7 @@ new class extends Component
     {
         $user = Auth::user();
         $this->isIdentifying = $user->is_identifying;
+        $this->autodartsName = $user->autodarts_name ?? '';
         
         if ($user->player) {
             $this->playerId = $user->player->id;
@@ -65,8 +67,21 @@ new class extends Component
      */
     public function startIdentification(): void
     {
+        $this->validate([
+            'autodartsName' => ['required', 'string', 'min:1', 'max:255'],
+        ], [
+            'autodartsName.required' => 'Bitte gib deinen AutoDarts-Namen ein.',
+            'autodartsName.min' => 'Der AutoDarts-Name muss mindestens 1 Zeichen lang sein.',
+            'autodartsName.max' => 'Der AutoDarts-Name darf maximal 255 Zeichen lang sein.',
+        ]);
+
         $user = Auth::user();
-        $user->update(['is_identifying' => true]);
+        // Normalize: trim and replace multiple spaces with single space
+        $normalizedName = preg_replace('/\s+/', ' ', trim($this->autodartsName));
+        $user->update([
+            'is_identifying' => true,
+            'autodarts_name' => $normalizedName,
+        ]);
         $this->isIdentifying = true;
         $this->message = null;
         $this->success = false;
@@ -82,6 +97,7 @@ new class extends Component
         $this->isIdentifying = false;
         $this->message = null;
         $this->success = false;
+        $this->autodartsName = $user->autodarts_name ?? '';
     }
 }; ?>
 
@@ -112,17 +128,37 @@ new class extends Component
                 <flux:callout>
                     <p class="font-medium">{{ __('So funktioniert die Identifizierung:') }}</p>
                     <ol class="mt-2 list-decimal space-y-2 ps-5">
+                        <li>{{ __('Gib deinen AutoDarts-Namen ein') }}</li>
                         <li>{{ __('Klicke auf "Identifizierung starten"') }}</li>
                         <li>{{ __('Starte ein Spiel gegen einen Bot (z.B. "Bot Level 1") in Autodarts') }}</li>
                         <li>{{ __('Sende einen Webhook mit deinem Sanctum Token an /api/webhooks') }}</li>
-                        <li>{{ __('Dein Spieler wird automatisch mit deinem Account verknüpft') }}</li>
+                        <li>{{ __('Dein Spieler wird automatisch mit deinem Account verknüpft, wenn der Name übereinstimmt') }}</li>
                     </ol>
                 </flux:callout>
 
-                <div class="flex items-center gap-4">
-                    <flux:button variant="primary" wire:click="startIdentification">
-                        {{ __('Identifizierung starten') }}
-                    </flux:button>
+                <div class="space-y-4">
+                    <flux:field>
+                        <flux:label>{{ __('AutoDarts-Name') }}</flux:label>
+                        <flux:input 
+                            wire:model.live="autodartsName" 
+                            placeholder="{{ __('Dein AutoDarts-Name') }}"
+                            :disabled="$isIdentifying"
+                        />
+                        <flux:error name="autodartsName" />
+                        <flux:description>
+                            {{ __('Gib genau den Namen ein, der in AutoDarts angezeigt wird.') }}
+                        </flux:description>
+                    </flux:field>
+
+                    <div class="flex items-center gap-4">
+                        <flux:button 
+                            variant="primary" 
+                            wire:click="startIdentification"
+                            :disabled="strlen(trim($autodartsName)) === 0 || $isIdentifying"
+                        >
+                            {{ __('Identifizierung starten') }}
+                        </flux:button>
+                    </div>
                 </div>
             @endif
 

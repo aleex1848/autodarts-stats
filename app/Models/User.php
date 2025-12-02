@@ -33,6 +33,7 @@ class User extends Authenticatable
         'email',
         'password',
         'is_identifying',
+        'autodarts_name',
     ];
 
     /**
