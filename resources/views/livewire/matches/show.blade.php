@@ -2,10 +2,12 @@
 
 use App\Models\DartMatch;
 use App\Models\DartThrow;
+use App\Services\MatchReprocessingService;
 use Illuminate\Contracts\Database\Eloquent\Builder as QueryBuilder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
 
 new class extends Component
@@ -71,6 +73,51 @@ new class extends Component
         $this->segmentOptions = range(1, 20);
 
         $this->loadTargetAnalysis();
+    }
+
+    public function reprocessMatch(): void
+    {
+        $this->authorize('view', $this->match);
+
+        if (! Auth::user()->hasAnyRole(['Super-Admin', 'Admin'])) {
+            abort(403);
+        }
+
+        try {
+            $service = app(MatchReprocessingService::class);
+            $service->reprocessMatch($this->match);
+
+            // Reload match and legs after reprocessing
+            $this->match->refresh();
+            $this->match->load([
+                'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+                'players.user',
+                'winner',
+                'bullOffs.player.user',
+            ]);
+
+            $this->legs = $this->match->legs()
+                ->with([
+                    'winner',
+                    'legPlayers',
+                    'turns' => fn ($query) => $query->orderBy('round_number'),
+                    'turns.player',
+                    'turns.throws' => fn ($query) => $query->orderBy('dart_number'),
+                ])
+                ->orderBy('set_number')
+                ->orderBy('leg_number')
+                ->get();
+
+            $user = Auth::user();
+            $this->playerId = $user?->player?->id
+                ?? optional($this->match->players->firstWhere('user_id', $user?->id))->id;
+
+            $this->loadTargetAnalysis();
+
+            Session::flash('success', __('Match wurde erfolgreich erneut verarbeitet.'));
+        } catch (\Exception $e) {
+            Session::flash('error', __('Fehler beim erneuten Verarbeiten des Matches: :message', ['message' => $e->getMessage()]));
+        }
     }
 
     public function refreshMatch(): void
@@ -240,9 +287,19 @@ new class extends Component
     @include('livewire.matches.partials.details', [
         'title' => __('Matchdetails'),
         'subtitle' => __('Alle verfügbaren Statistiken zu diesem Match'),
-        'backUrl' => route('matches.index'),
-        'backLabel' => __('Zurück zu meinen Matches'),
     ])
+
+    @if (session('success'))
+        <div class="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/50 dark:text-green-200">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/50 dark:text-red-200">
+            {{ session('error') }}
+        </div>
+    @endif
 
     @hasanyrole('Super-Admin|Admin')
         <div class="flex justify-end gap-2">
@@ -252,6 +309,14 @@ new class extends Component
                 :href="route('matches.export', $match)"
             >
                 {{ __('Match exportieren') }}
+            </flux:button>
+            <flux:button
+                variant="danger"
+                icon="arrow-path"
+                wire:click="reprocessMatch"
+                wire:confirm="{{ __('Sind Sie sicher, dass Sie dieses Match erneut verarbeiten möchten? Alle verarbeiteten Daten werden gelöscht und die Rohdaten werden erneut verarbeitet. Diese Aktion kann nicht rückgängig gemacht werden.') }}"
+            >
+                {{ __('Match erneut verarbeiten') }}
             </flux:button>
         </div>
     @endhasanyrole

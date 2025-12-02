@@ -104,7 +104,7 @@ test('admin match detail page includes chalkboard component', function () {
 
     $this->actingAs($user);
 
-    $response = $this->get(route('admin.matches.show', $match));
+    $response = $this->get(route('matches.show', $match));
 
     $response->assertSuccessful();
     $response->assertSee('Kreidetafel-Ansicht');

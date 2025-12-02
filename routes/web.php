@@ -132,9 +132,6 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         Route::post('admin/user-switch/{user}', [\App\Http\Controllers\Admin\UserSwitchController::class, 'switch'])->name('user-switch.switch');
 
         Volt::route('admin/matches', 'admin.matches.index')->name('matches.index');
-        Volt::route('admin/matches/{match}', 'admin.matches.show')
-            ->middleware('can:view,match')
-            ->name('matches.show');
 
         Volt::route('admin/leagues', 'admin.leagues.index')->name('leagues.index');
         Volt::route('admin/leagues/create', 'admin.leagues.create')->name('leagues.create');
@@ -153,16 +150,6 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         Volt::route('admin/seasons/{season}/edit', 'admin.seasons.edit')
             ->middleware('can:update,season')
             ->name('seasons.edit');
-        // Export route
-        Route::get('admin/matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
-            $data = $exportService->exportMatch($match);
-            $filename = 'match-'.$match->autodarts_match_id.'-'.now()->format('Y-m-d-His').'.json';
-
-            return response()->json($data, 200, [
-                'Content-Type' => 'application/json',
-                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-            ]);
-        })->middleware('can:view,match')->name('matches.export');
 
         // Import route
         Route::post('admin/matches/import', function (Request $request, MatchImportService $importService) {

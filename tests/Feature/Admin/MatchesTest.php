@@ -72,10 +72,10 @@ test('ein admin kann einzelne matches einsehen', function () {
 
     $this->actingAs($admin);
 
-    $response = $this->get(route('admin.matches.show', $match));
+    $response = $this->get(route('matches.show', $match));
     $response->assertOk();
     $response->assertSee($players->first()->name);
-    $response->assertSee('Matchübersicht');
+    $response->assertSee('Matchdetails');
 });
 
 test('nicht-admins dürfen die admin matches nicht sehen', function () {

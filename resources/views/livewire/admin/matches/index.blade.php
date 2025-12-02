@@ -107,7 +107,7 @@ new class extends Component {
             Session::flash('success', __('Match wurde erfolgreich importiert.'));
             $this->closeImportModal();
 
-            $this->redirect(route('admin.matches.show', $match));
+            $this->redirect(route('matches.show', $match));
         } catch (\Exception $e) {
             Session::flash('error', __('Fehler beim Importieren: :message', ['message' => $e->getMessage()]));
             $this->closeImportModal();
@@ -333,7 +333,7 @@ new class extends Component {
                                 <flux:button
                                     size="sm"
                                     variant="outline"
-                                    :href="route('admin.matches.show', $match)"
+                                    :href="route('matches.show', $match)"
                                     wire:navigate
                                     icon="arrow-top-right-on-square"
                                 >

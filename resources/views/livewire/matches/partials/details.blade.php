@@ -16,11 +16,13 @@
         </div>
 
         <div class="flex flex-wrap gap-2">
-            @if (! empty($backUrl))
-                <flux:button icon="arrow-left" variant="ghost" :href="$backUrl" wire:navigate>
-                    {{ $backLabel ?? __('Zurück') }}
-                </flux:button>
-            @endif
+            <flux:button 
+                icon="arrow-left" 
+                variant="ghost" 
+                onclick="window.history.back(); return false;"
+            >
+                {{ __('Zurück') }}
+            </flux:button>
         </div>
     </div>
 
