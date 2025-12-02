@@ -4,19 +4,21 @@ use App\Enums\LeagueMatchFormat;
 use App\Enums\LeagueMode;
 use App\Enums\LeagueStatus;
 use App\Enums\LeagueVariant;
-use App\Models\League;
 use App\Models\Season;
 use App\Models\User;
 use App\Rules\ImageDimensions;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Livewire\Attributes\Locked;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 
 new class extends Component {
     use WithFileUploads;
 
-    public ?int $league_id = null;
+    #[Locked]
+    public Season $season;
+
     public string $name = '';
     public string $slug = '';
     public string $description = '';
@@ -32,21 +34,24 @@ new class extends Component {
     public array $selectedCoAdmins = [];
     public string $coAdminSearch = '';
 
-    public function mount(?int $league = null): void
+    public function mount(Season $season): void
     {
-        $this->league_id = $league;
-        $this->mode = LeagueMode::SingleRound->value;
-        $this->variant = LeagueVariant::Single501DoubleOut->value;
-        $this->match_format = LeagueMatchFormat::BestOf3->value;
-        $this->status = LeagueStatus::Registration->value;
+        $this->season = $season->load('coAdmins', 'league');
+        $this->name = $season->name;
+        $this->slug = $season->slug ?? '';
+        $this->description = $season->description ?? '';
+        $this->max_players = $season->max_players;
+        $this->mode = $season->mode;
+        $this->variant = $season->variant;
+        $this->match_format = $season->match_format;
+        $this->registration_deadline = $season->registration_deadline?->format('Y-m-d\TH:i');
+        $this->days_per_matchday = $season->days_per_matchday;
+        $this->status = $season->status;
+        $this->selectedCoAdmins = $season->coAdmins->pluck('id')->toArray();
     }
 
     public function with(): array
     {
-        $leagues = League::query()
-            ->orderBy('name')
-            ->get();
-
         $users = User::query()
             ->when($this->coAdminSearch !== '', function ($query) {
                 $query->where('name', 'like', '%' . $this->coAdminSearch . '%')
@@ -56,7 +61,6 @@ new class extends Component {
             ->get();
 
         return [
-            'leagues' => $leagues,
             'modes' => LeagueMode::cases(),
             'variants' => LeagueVariant::cases(),
             'formats' => LeagueMatchFormat::cases(),
@@ -93,7 +97,6 @@ new class extends Component {
     protected function rules(): array
     {
         return [
-            'league_id' => ['required', 'exists:leagues,id'],
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
             'description' => ['nullable', 'string'],
@@ -101,7 +104,7 @@ new class extends Component {
             'mode' => ['required', 'string'],
             'variant' => ['required', 'string'],
             'match_format' => ['required', 'string'],
-            'registration_deadline' => ['nullable', 'date', 'after:now'],
+            'registration_deadline' => ['nullable', 'date'],
             'days_per_matchday' => ['required', 'integer', 'min:1', 'max:30'],
             'status' => ['required', 'string'],
             'banner' => ['nullable', 'image', 'max:5120', new ImageDimensions(1152, 100)], // 1152x100px Banner
@@ -120,9 +123,10 @@ new class extends Component {
         
         $validated = $this->validate();
         
-        // Prüfe, ob Slug innerhalb der Liga eindeutig ist
-        $existingSeason = Season::where('league_id', $validated['league_id'])
+        // Prüfe, ob Slug innerhalb der Liga eindeutig ist (ignoriere aktuelle Season)
+        $existingSeason = Season::where('league_id', $this->season->league_id)
             ->where('slug', $validated['slug'])
+            ->where('id', '!=', $this->season->id)
             ->exists();
 
         if ($existingSeason) {
@@ -131,18 +135,25 @@ new class extends Component {
             return;
         }
         
-        $bannerPath = null;
+        $bannerPath = $this->season->attributes['banner_path'] ?? null;
         if ($this->banner) {
+            // Altes Banner löschen, falls vorhanden
+            if ($bannerPath && Storage::disk('public')->exists($bannerPath)) {
+                Storage::disk('public')->delete($bannerPath);
+            }
             $bannerPath = $this->banner->store('season-banners', 'public');
         }
 
-        $logoPath = null;
+        $logoPath = $this->season->attributes['logo_path'] ?? null;
         if ($this->logo) {
+            // Altes Logo löschen, falls vorhanden
+            if ($logoPath && Storage::disk('public')->exists($logoPath)) {
+                Storage::disk('public')->delete($logoPath);
+            }
             $logoPath = $this->logo->store('season-logos', 'public');
         }
 
-        $season = Season::create([
-            'league_id' => $validated['league_id'],
+        $this->season->update([
             'name' => $validated['name'],
             'slug' => $validated['slug'],
             'description' => $validated['description'] ?? null,
@@ -155,24 +166,47 @@ new class extends Component {
             'status' => $validated['status'],
             'banner_path' => $bannerPath,
             'logo_path' => $logoPath,
-            'created_by_user_id' => Auth::id(),
         ]);
 
         // Sync Co-Admins
-        if (!empty($validated['selectedCoAdmins'])) {
-            $season->coAdmins()->sync($validated['selectedCoAdmins']);
+        $this->season->coAdmins()->sync($validated['selectedCoAdmins'] ?? []);
+
+        $this->dispatch('notify', title: __('Saison aktualisiert'));
+
+        $this->redirect(route('admin.seasons.show', $this->season), navigate: true);
+    }
+
+    public function removeBanner(): void
+    {
+        $bannerPath = $this->season->attributes['banner_path'] ?? null;
+        if ($bannerPath && Storage::disk('public')->exists($bannerPath)) {
+            Storage::disk('public')->delete($bannerPath);
         }
+        
+        $this->season->update(['banner_path' => null]);
+        $this->banner = null;
+        
+        $this->dispatch('notify', title: __('Banner entfernt'));
+    }
 
-        $this->dispatch('notify', title: __('Saison erstellt'));
-
-        $this->redirect(route('admin.seasons.show', $season), navigate: true);
+    public function removeLogo(): void
+    {
+        $logoPath = $this->season->attributes['logo_path'] ?? null;
+        if ($logoPath && Storage::disk('public')->exists($logoPath)) {
+            Storage::disk('public')->delete($logoPath);
+        }
+        
+        $this->season->update(['logo_path' => null]);
+        $this->logo = null;
+        
+        $this->dispatch('notify', title: __('Logo entfernt'));
     }
 }; ?>
 
 <section class="w-full space-y-6">
     <div>
-        <flux:heading size="xl">{{ __('Neue Saison erstellen') }}</flux:heading>
-        <flux:subheading>{{ __('Erstelle eine neue Saison für eine Liga') }}</flux:subheading>
+        <flux:heading size="xl">{{ __('Saison bearbeiten') }}</flux:heading>
+        <flux:subheading>{{ __('Bearbeite die Einstellungen der Saison') }}</flux:subheading>
     </div>
 
     <form wire:submit="save" class="space-y-6">
@@ -180,16 +214,11 @@ new class extends Component {
             <flux:heading size="lg" class="mb-4">{{ __('Grundeinstellungen') }}</flux:heading>
 
             <div class="space-y-4">
-                <flux:select
-                    wire:model="league_id"
-                    :label="__('Liga')"
-                    required
-                >
-                    <option value="">{{ __('Liga auswählen...') }}</option>
-                    @foreach ($leagues as $league)
-                        <option value="{{ $league->id }}">{{ $league->name }}</option>
-                    @endforeach
-                </flux:select>
+                <div>
+                    <flux:heading size="sm" class="mb-2">{{ __('Liga') }}</flux:heading>
+                    <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ $season->league->name }}</p>
+                    <p class="mt-1 text-xs text-zinc-500">{{ __('Die Liga kann nicht geändert werden') }}</p>
+                </div>
 
                 <flux:input
                     wire:model.live="name"
@@ -252,7 +281,7 @@ new class extends Component {
                     required
                 >
                     @foreach ($modes as $modeOption)
-                        <option value="{{ $modeOption->value }}">
+                        <option value="{{ $modeOption->value }}" {{ $mode === $modeOption->value ? 'selected' : '' }}>
                             {{ match($modeOption->value) {
                                 'single_round' => __('Nur Hinrunde'),
                                 'double_round' => __('Hin & Rückrunde'),
@@ -268,7 +297,7 @@ new class extends Component {
                     required
                 >
                     @foreach ($variants as $variantOption)
-                        <option value="{{ $variantOption->value }}">
+                        <option value="{{ $variantOption->value }}" {{ $variant === $variantOption->value ? 'selected' : '' }}>
                             {{ match($variantOption->value) {
                                 '501_single_single' => __('501 Single-In Single-Out'),
                                 '501_single_double' => __('501 Single-In Double-Out'),
@@ -284,7 +313,7 @@ new class extends Component {
                     required
                 >
                     @foreach ($formats as $format)
-                        <option value="{{ $format->value }}">
+                        <option value="{{ $format->value }}" {{ $match_format === $format->value ? 'selected' : '' }}>
                             {{ match($format->value) {
                                 'best_of_3' => __('Best of 3'),
                                 'best_of_5' => __('Best of 5'),
@@ -300,7 +329,7 @@ new class extends Component {
                     required
                 >
                     @foreach ($statuses as $statusOption)
-                        <option value="{{ $statusOption->value }}">
+                        <option value="{{ $statusOption->value }}" {{ $status === $statusOption->value ? 'selected' : '' }}>
                             {{ __(ucfirst($statusOption->name)) }}
                         </option>
                     @endforeach
@@ -332,6 +361,30 @@ new class extends Component {
                                 </x-slot>
                             </flux:file-item>
                         </div>
+                    @elseif ($season->hasOwnBanner())
+                        <div class="mt-3">
+                            <div class="relative">
+                                <img src="{{ Storage::url($season->attributes['banner_path']) }}" alt="{{ $season->name }}" class="h-32 w-auto rounded-lg object-cover" />
+                                <flux:button
+                                    type="button"
+                                    size="xs"
+                                    variant="danger"
+                                    class="absolute right-2 top-2"
+                                    wire:click="removeBanner"
+                                >
+                                    {{ __('Entfernen') }}
+                                </flux:button>
+                            </div>
+                        </div>
+                    @elseif ($season->getBannerPath())
+                        <div class="mt-3">
+                            <div class="rounded-lg border border-zinc-300 p-3 dark:border-zinc-600">
+                                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Verwendet Banner der Liga') }}: 
+                                    <img src="{{ Storage::url($season->getBannerPath()) }}" alt="{{ $season->league->name }}" class="mt-2 h-24 w-auto rounded object-cover" />
+                                </p>
+                            </div>
+                        </div>
                     @endif
 
                     @error('banner')
@@ -358,6 +411,30 @@ new class extends Component {
                                     <flux:file-item.remove wire:click="$set('logo', null)" aria-label="{{ __('Logo entfernen') }}" />
                                 </x-slot>
                             </flux:file-item>
+                        </div>
+                    @elseif ($season->hasOwnLogo())
+                        <div class="mt-3">
+                            <div class="relative inline-block">
+                                <img src="{{ Storage::url($season->attributes['logo_path']) }}" alt="{{ $season->name }} Logo" class="h-32 w-32 rounded-lg object-cover" />
+                                <flux:button
+                                    type="button"
+                                    size="xs"
+                                    variant="danger"
+                                    class="absolute right-2 top-2"
+                                    wire:click="removeLogo"
+                                >
+                                    {{ __('Entfernen') }}
+                                </flux:button>
+                            </div>
+                        </div>
+                    @elseif ($season->getLogoPath())
+                        <div class="mt-3">
+                            <div class="rounded-lg border border-zinc-300 p-3 dark:border-zinc-600">
+                                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Verwendet Logo der Liga') }}: 
+                                    <img src="{{ Storage::url($season->getLogoPath()) }}" alt="{{ $season->league->name }} Logo" class="mt-2 h-24 w-24 rounded object-cover" />
+                                </p>
+                            </div>
                         </div>
                     @endif
 
@@ -404,14 +481,14 @@ new class extends Component {
             <flux:button
                 type="button"
                 variant="ghost"
-                :href="route('admin.leagues.index')"
+                :href="route('admin.seasons.show', $season)"
                 wire:navigate
             >
                 {{ __('Abbrechen') }}
             </flux:button>
 
             <flux:button type="submit" variant="primary">
-                {{ __('Saison erstellen') }}
+                {{ __('Speichern') }}
             </flux:button>
         </div>
     </form>

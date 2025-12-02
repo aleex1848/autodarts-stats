@@ -66,9 +66,9 @@ new class extends Component {
         </flux:button>
     </div>
 
-    @if ($season->image_path)
+    @if ($season->getBannerPath())
         <div class="overflow-hidden rounded-xl">
-            <img src="{{ Storage::url($season->image_path) }}" alt="{{ $season->name }}" class="w-full h-auto max-h-64 object-cover" />
+            <img src="{{ Storage::url($season->getBannerPath()) }}" alt="{{ $season->name }}" class="w-full h-auto max-h-64 object-cover" />
         </div>
     @endif
 

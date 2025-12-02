@@ -2,6 +2,7 @@
 
 use App\Models\League;
 use App\Models\User;
+use App\Rules\ImageDimensions;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
@@ -18,6 +19,7 @@ new class extends Component {
     public string $slug = '';
     public string $description = '';
     public $banner = null;
+    public $logo = null;
     public ?string $discord_invite_link = null;
     public array $selectedCoAdmins = [];
     public string $coAdminSearch = '';
@@ -78,7 +80,8 @@ new class extends Component {
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'unique:leagues,slug,' . $this->league->id],
             'description' => ['nullable', 'string'],
-            'banner' => ['nullable', 'image', 'max:5120'], // 5MB max
+            'banner' => ['nullable', 'image', 'max:5120', new ImageDimensions(1152, 100)], // 1152x100px
+            'logo' => ['nullable', 'image', 'max:5120', new ImageDimensions(null, null, true)], // Quadratisch
             'discord_invite_link' => ['nullable', 'url', 'max:255'],
             'selectedCoAdmins' => ['nullable', 'array'],
             'selectedCoAdmins.*' => ['exists:users,id'],
@@ -103,11 +106,21 @@ new class extends Component {
             $bannerPath = $this->banner->store('league-banners', 'public');
         }
 
+        $logoPath = $this->league->logo_path;
+        if ($this->logo) {
+            // Altes Logo löschen, falls vorhanden
+            if ($logoPath && Storage::disk('public')->exists($logoPath)) {
+                Storage::disk('public')->delete($logoPath);
+            }
+            $logoPath = $this->logo->store('league-logos', 'public');
+        }
+
         $this->league->update([
             'name' => $validated['name'],
             'slug' => $validated['slug'],
             'description' => $validated['description'] ?? null,
             'banner_path' => $bannerPath,
+            'logo_path' => $logoPath,
             'discord_invite_link' => $validated['discord_invite_link'] ?? null,
         ]);
 
@@ -129,6 +142,18 @@ new class extends Component {
         $this->banner = null;
         
         $this->dispatch('notify', title: __('Banner entfernt'));
+    }
+
+    public function removeLogo(): void
+    {
+        if ($this->league->logo_path && Storage::disk('public')->exists($this->league->logo_path)) {
+            Storage::disk('public')->delete($this->league->logo_path);
+        }
+        
+        $this->league->update(['logo_path' => null]);
+        $this->logo = null;
+        
+        $this->dispatch('notify', title: __('Logo entfernt'));
     }
 }; ?>
 
@@ -178,7 +203,7 @@ new class extends Component {
                     <flux:file-upload wire:model="banner" :label="__('Banner (optional)')">
                         <flux:file-upload.dropzone 
                             heading="{{ __('Banner hochladen') }}" 
-                            text="{{ __('JPG, PNG bis zu 5MB') }}" 
+                            text="{{ __('JPG, PNG bis zu 5MB, 1152x100 Pixel') }}" 
                         />
                     </flux:file-upload>
 
@@ -212,6 +237,48 @@ new class extends Component {
                     @endif
 
                     @error('banner')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:file-upload wire:model="logo" :label="__('Logo (optional)')">
+                        <flux:file-upload.dropzone 
+                            heading="{{ __('Logo hochladen') }}" 
+                            text="{{ __('JPG, PNG bis zu 5MB, quadratisch') }}" 
+                        />
+                    </flux:file-upload>
+
+                    @if ($logo)
+                        <div class="mt-3">
+                            <flux:file-item
+                                :heading="$logo->getClientOriginalName()"
+                                :image="$logo->temporaryUrl()"
+                                :size="$logo->getSize()"
+                            >
+                                <x-slot name="actions">
+                                    <flux:file-item.remove wire:click="$set('logo', null)" aria-label="{{ __('Logo entfernen') }}" />
+                                </x-slot>
+                            </flux:file-item>
+                        </div>
+                    @elseif ($league->logo_path)
+                        <div class="mt-3">
+                            <div class="relative inline-block">
+                                <img src="{{ Storage::url($league->logo_path) }}" alt="{{ $league->name }} Logo" class="h-32 w-32 rounded-lg object-cover" />
+                                <flux:button
+                                    type="button"
+                                    size="xs"
+                                    variant="danger"
+                                    class="absolute right-2 top-2"
+                                    wire:click="removeLogo"
+                                >
+                                    {{ __('Entfernen') }}
+                                </flux:button>
+                            </div>
+                        </div>
+                    @endif
+
+                    @error('logo')
                         <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
                 </div>

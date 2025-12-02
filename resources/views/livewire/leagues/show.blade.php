@@ -106,9 +106,9 @@ new class extends Component {
                 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     @foreach ($seasons as $season)
                         <div wire:key="season-{{ $season->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                            @if ($season->image_path)
+                            @if ($season->getBannerPath())
                                 <div class="mb-4 overflow-hidden rounded-lg">
-                                    <img src="{{ Storage::url($season->image_path) }}" alt="{{ $season->name }}" class="h-32 w-full object-cover" />
+                                    <img src="{{ Storage::url($season->getBannerPath()) }}" alt="{{ $season->name }}" class="h-32 w-full object-cover" />
                                 </div>
                             @endif
 

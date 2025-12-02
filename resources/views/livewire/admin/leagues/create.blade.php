@@ -2,6 +2,7 @@
 
 use App\Models\League;
 use App\Models\User;
+use App\Rules\ImageDimensions;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Volt\Component;
@@ -14,6 +15,7 @@ new class extends Component {
     public string $slug = '';
     public string $description = '';
     public $banner = null;
+    public $logo = null;
     public ?string $discord_invite_link = null;
     public $selectedCoAdmins = null;
     public string $coAdminSearch = '';
@@ -94,7 +96,8 @@ new class extends Component {
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'unique:leagues,slug'],
             'description' => ['nullable', 'string'],
-            'banner' => ['nullable', 'image', 'max:5120'], // 5MB max
+            'banner' => ['nullable', 'image', 'max:5120', new ImageDimensions(1152, 100)], // 1152x100px
+            'logo' => ['nullable', 'image', 'max:5120', new ImageDimensions(null, null, true)], // Quadratisch
             'discord_invite_link' => ['nullable', 'url', 'max:255'],
             'selectedCoAdmins' => ['nullable', 'array'],
             'selectedCoAdmins.*' => ['exists:users,id'],
@@ -118,11 +121,17 @@ new class extends Component {
             $bannerPath = $this->banner->store('league-banners', 'public');
         }
 
+        $logoPath = null;
+        if ($this->logo) {
+            $logoPath = $this->logo->store('league-logos', 'public');
+        }
+
         $league = League::create([
             'name' => $validated['name'],
             'slug' => $validated['slug'],
             'description' => $validated['description'] ?? null,
             'banner_path' => $bannerPath,
+            'logo_path' => $logoPath,
             'discord_invite_link' => $validated['discord_invite_link'] ?? null,
             'created_by_user_id' => Auth::id(),
         ]);
@@ -183,7 +192,7 @@ new class extends Component {
                     <flux:file-upload wire:model="banner" :label="__('Banner (optional)')">
                         <flux:file-upload.dropzone 
                             heading="{{ __('Banner hochladen') }}" 
-                            text="{{ __('JPG, PNG bis zu 5MB') }}" 
+                            text="{{ __('JPG, PNG bis zu 5MB, 1152x100 Pixel') }}" 
                         />
                     </flux:file-upload>
 
@@ -202,6 +211,33 @@ new class extends Component {
                     @endif
 
                     @error('banner')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div>
+                    <flux:file-upload wire:model="logo" :label="__('Logo (optional)')">
+                        <flux:file-upload.dropzone 
+                            heading="{{ __('Logo hochladen') }}" 
+                            text="{{ __('JPG, PNG bis zu 5MB, quadratisch') }}" 
+                        />
+                    </flux:file-upload>
+
+                    @if ($logo)
+                        <div class="mt-3">
+                            <flux:file-item
+                                :heading="$logo->getClientOriginalName()"
+                                :image="$logo->temporaryUrl()"
+                                :size="$logo->getSize()"
+                            >
+                                <x-slot name="actions">
+                                    <flux:file-item.remove wire:click="$set('logo', null)" aria-label="{{ __('Logo entfernen') }}" />
+                                </x-slot>
+                            </flux:file-item>
+                        </div>
+                    @endif
+
+                    @error('logo')
                         <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
                 </div>

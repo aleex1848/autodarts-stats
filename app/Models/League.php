@@ -17,6 +17,7 @@ class League extends Model
         'slug',
         'description',
         'banner_path',
+        'logo_path',
         'discord_invite_link',
         'created_by_user_id',
     ];

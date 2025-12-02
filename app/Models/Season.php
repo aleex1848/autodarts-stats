@@ -24,7 +24,8 @@ class Season extends Model
         'registration_deadline',
         'days_per_matchday',
         'status',
-        'image_path',
+        'banner_path',
+        'logo_path',
         'parent_season_id',
         'created_by_user_id',
     ];
@@ -40,7 +41,7 @@ class Season extends Model
 
     public function league(): BelongsTo
     {
-        return $this->belongsTo(League::class);
+        return $this->belongsTo(League::class)->withDefault();
     }
 
     public function creator(): BelongsTo
@@ -83,5 +84,37 @@ class Season extends Model
     {
         return $this->created_by_user_id === $user->id
             || $this->coAdmins()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Get the banner path with fallback to league banner
+     */
+    public function getBannerPath(): ?string
+    {
+        return $this->attributes['banner_path'] ?? $this->league?->banner_path;
+    }
+
+    /**
+     * Get the logo path with fallback to league logo
+     */
+    public function getLogoPath(): ?string
+    {
+        return $this->attributes['logo_path'] ?? $this->league?->logo_path;
+    }
+
+    /**
+     * Check if season has its own banner (not using league fallback)
+     */
+    public function hasOwnBanner(): bool
+    {
+        return $this->attributes['banner_path'] !== null;
+    }
+
+    /**
+     * Check if season has its own logo (not using league fallback)
+     */
+    public function hasOwnLogo(): bool
+    {
+        return $this->attributes['logo_path'] !== null;
     }
 }
