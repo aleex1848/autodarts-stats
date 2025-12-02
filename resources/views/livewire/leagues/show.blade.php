@@ -55,7 +55,7 @@ new class extends Component {
         <div class="flex justify-center">
             <flux:button
                 variant="primary"
-                icon="brand-discord"
+                icon="arrow-top-right-on-square"
                 :href="$league->discord_invite_link"
                 target="_blank"
                 rel="noopener noreferrer"
