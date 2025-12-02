@@ -3,19 +3,19 @@
 namespace App\Services;
 
 use App\Enums\FixtureStatus;
-use App\Models\League;
-use App\Models\LeagueParticipant;
+use App\Models\Season;
+use App\Models\SeasonParticipant;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class LeagueStandingsCalculator
 {
-    public function calculateStandings(League $league): Collection
+    public function calculateStandings(Season $season): Collection
     {
-        $participants = $league->participants()->with('player')->get();
+        $participants = $season->participants()->with('player')->get();
 
         foreach ($participants as $participant) {
-            $this->updateParticipantStats($participant);
+            $this->updateSeasonParticipantStats($participant, $season);
         }
 
         // Sort by points (desc), then legs won (desc), then legs lost (asc)
@@ -31,14 +31,12 @@ class LeagueStandingsCalculator
         });
     }
 
-    public function updateParticipantStats(LeagueParticipant $participant): void
+    public function updateSeasonParticipantStats(SeasonParticipant $participant, Season $season): void
     {
-        $league = $participant->league;
-
         // Get all fixtures where this participant is playing
         $fixtures = DB::table('matchday_fixtures')
             ->join('matchdays', 'matchday_fixtures.matchday_id', '=', 'matchdays.id')
-            ->where('matchdays.league_id', $league->id)
+            ->where('matchdays.season_id', $season->id)
             ->where(function ($query) use ($participant) {
                 $query->where('matchday_fixtures.home_player_id', $participant->player_id)
                     ->orWhere('matchday_fixtures.away_player_id', $participant->player_id);
@@ -47,6 +45,17 @@ class LeagueStandingsCalculator
             ->select('matchday_fixtures.*')
             ->get();
 
+        $this->updateStatsForSeasonParticipant($participant, $fixtures);
+    }
+
+    protected function updateStatsForSeasonParticipant(SeasonParticipant $participant, $fixtures): void
+    {
+        $stats = $this->calculateStats($participant->player_id, $fixtures, $participant->penalty_points);
+        $participant->update($stats);
+    }
+
+    protected function calculateStats(int $playerId, $fixtures, int $penaltyPoints): array
+    {
         $stats = [
             'points' => 0,
             'matches_played' => 0,
@@ -60,14 +69,14 @@ class LeagueStandingsCalculator
         foreach ($fixtures as $fixture) {
             $stats['matches_played']++;
 
-            $isHome = $fixture->home_player_id == $participant->player_id;
+            $isHome = $fixture->home_player_id == $playerId;
 
             if ($isHome) {
-                $stats['points'] += $fixture->points_awarded_home;
+                $stats['points'] += $fixture->points_awarded_home ?? 0;
                 $stats['legs_won'] += $fixture->home_legs_won ?? 0;
                 $stats['legs_lost'] += $fixture->away_legs_won ?? 0;
 
-                if ($fixture->winner_player_id == $participant->player_id) {
+                if ($fixture->winner_player_id == $playerId) {
                     $stats['matches_won']++;
                 } elseif ($fixture->winner_player_id === null) {
                     $stats['matches_draw']++;
@@ -75,11 +84,11 @@ class LeagueStandingsCalculator
                     $stats['matches_lost']++;
                 }
             } else {
-                $stats['points'] += $fixture->points_awarded_away;
+                $stats['points'] += $fixture->points_awarded_away ?? 0;
                 $stats['legs_won'] += $fixture->away_legs_won ?? 0;
                 $stats['legs_lost'] += $fixture->home_legs_won ?? 0;
 
-                if ($fixture->winner_player_id == $participant->player_id) {
+                if ($fixture->winner_player_id == $playerId) {
                     $stats['matches_won']++;
                 } elseif ($fixture->winner_player_id === null) {
                     $stats['matches_draw']++;
@@ -90,17 +99,17 @@ class LeagueStandingsCalculator
         }
 
         // Subtract penalty points
-        $stats['points'] -= $participant->penalty_points;
+        $stats['points'] -= $penaltyPoints;
 
-        $participant->update($stats);
+        return $stats;
     }
 
-    public function checkForTiebreaker(League $league): ?array
+    public function checkForTiebreaker(Season $season): ?array
     {
-        $standings = $this->calculateStandings($league);
+        $standings = $this->calculateStandings($season);
 
-        // Check if league is completed
-        $allMatchesPlayed = $league->matchdays()
+        // Check if season is completed
+        $allMatchesPlayed = $season->matchdays()
             ->where('is_playoff', false)
             ->get()
             ->every(function ($matchday) {

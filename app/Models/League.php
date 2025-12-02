@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class League extends Model
@@ -15,24 +16,14 @@ class League extends Model
         'name',
         'slug',
         'description',
-        'max_players',
-        'mode',
-        'variant',
-        'match_format',
-        'registration_deadline',
-        'days_per_matchday',
-        'status',
-        'parent_league_id',
+        'banner_path',
+        'discord_invite_link',
         'created_by_user_id',
     ];
 
     protected function casts(): array
     {
-        return [
-            'registration_deadline' => 'datetime',
-            'max_players' => 'integer',
-            'days_per_matchday' => 'integer',
-        ];
+        return [];
     }
 
     public function creator(): BelongsTo
@@ -40,28 +31,20 @@ class League extends Model
         return $this->belongsTo(User::class, 'created_by_user_id');
     }
 
-    public function parentLeague(): BelongsTo
+    public function seasons(): HasMany
     {
-        return $this->belongsTo(League::class, 'parent_league_id');
+        return $this->hasMany(Season::class);
     }
 
-    public function subLeagues(): HasMany
+    public function coAdmins(): BelongsToMany
     {
-        return $this->hasMany(League::class, 'parent_league_id');
+        return $this->belongsToMany(User::class, 'league_co_admins')
+            ->withTimestamps();
     }
 
-    public function registrations(): HasMany
+    public function isAdmin(User $user): bool
     {
-        return $this->hasMany(LeagueRegistration::class);
-    }
-
-    public function participants(): HasMany
-    {
-        return $this->hasMany(LeagueParticipant::class);
-    }
-
-    public function matchdays(): HasMany
-    {
-        return $this->hasMany(Matchday::class);
+        return $this->created_by_user_id === $user->id
+            || $this->coAdmins()->where('user_id', $user->id)->exists();
     }
 }

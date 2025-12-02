@@ -1,41 +1,75 @@
 <?php
 
-use App\Enums\LeagueMatchFormat;
-use App\Enums\LeagueMode;
-use App\Enums\LeagueStatus;
-use App\Enums\LeagueVariant;
 use App\Models\League;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new class extends Component {
+    use WithFileUploads;
+
     public string $name = '';
     public string $slug = '';
     public string $description = '';
-    public int $max_players = 20;
-    public string $mode = '';
-    public string $variant = '';
-    public string $match_format = '';
-    public ?string $registration_deadline = null;
-    public int $days_per_matchday = 7;
-    public string $status = '';
+    public $banner = null;
+    public ?string $discord_invite_link = null;
+    public $selectedCoAdmins = null;
+    public string $coAdminSearch = '';
 
     public function mount(): void
     {
-        $this->mode = LeagueMode::SingleRound->value;
-        $this->variant = LeagueVariant::Single501DoubleOut->value;
-        $this->match_format = LeagueMatchFormat::BestOf3->value;
-        $this->status = LeagueStatus::Registration->value;
+        // Stelle sicher, dass selectedCoAdmins initial ein Array ist
+        if (!is_array($this->selectedCoAdmins)) {
+            $this->selectedCoAdmins = [];
+        }
+    }
+
+    public function boot(): void
+    {
+        // Normalisiere beim Booten, falls nötig
+        $this->normalizeSelectedCoAdmins();
+    }
+
+    public function updatedSelectedCoAdmins($value): void
+    {
+        // Normalisiere den Wert zu einem Array, sobald er aktualisiert wird
+        $this->normalizeSelectedCoAdmins();
+    }
+
+    protected function normalizeSelectedCoAdmins(): void
+    {
+        if (!is_array($this->selectedCoAdmins)) {
+            if (is_null($this->selectedCoAdmins) || $this->selectedCoAdmins === '') {
+                $this->selectedCoAdmins = [];
+            } else {
+                $this->selectedCoAdmins = [(string) $this->selectedCoAdmins];
+            }
+        } else {
+            // Filtere leere Werte heraus und konvertiere zu Strings
+            $this->selectedCoAdmins = array_values(array_filter(array_map('strval', $this->selectedCoAdmins), fn($v) => $v !== ''));
+        }
+    }
+
+    protected function getSelectedCoAdminsArray(): array
+    {
+        $this->normalizeSelectedCoAdmins();
+        return is_array($this->selectedCoAdmins) ? $this->selectedCoAdmins : [];
     }
 
     public function with(): array
     {
+        $users = User::query()
+            ->when($this->coAdminSearch !== '', function ($query) {
+                $query->where('name', 'like', '%' . $this->coAdminSearch . '%')
+                    ->orWhere('email', 'like', '%' . $this->coAdminSearch . '%');
+            })
+            ->limit(50)
+            ->get();
+
         return [
-            'modes' => LeagueMode::cases(),
-            'variants' => LeagueVariant::cases(),
-            'formats' => LeagueMatchFormat::cases(),
-            'statuses' => LeagueStatus::cases(),
+            'users' => $users,
         ];
     }
 
@@ -53,17 +87,17 @@ new class extends Component {
 
     protected function rules(): array
     {
+        // Normalisiere selectedCoAdmins vor der Validierung
+        $this->normalizeSelectedCoAdmins();
+        
         return [
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'unique:leagues,slug'],
             'description' => ['nullable', 'string'],
-            'max_players' => ['required', 'integer', 'min:2', 'max:100'],
-            'mode' => ['required', 'string'],
-            'variant' => ['required', 'string'],
-            'match_format' => ['required', 'string'],
-            'registration_deadline' => ['nullable', 'date', 'after:now'],
-            'days_per_matchday' => ['required', 'integer', 'min:1', 'max:30'],
-            'status' => ['required', 'string'],
+            'banner' => ['nullable', 'image', 'max:5120'], // 5MB max
+            'discord_invite_link' => ['nullable', 'url', 'max:255'],
+            'selectedCoAdmins' => ['nullable', 'array'],
+            'selectedCoAdmins.*' => ['exists:users,id'],
         ];
     }
 
@@ -74,11 +108,28 @@ new class extends Component {
             $this->slug = Str::slug($this->name);
         }
         
+        // Normalisiere selectedCoAdmins vor der Validierung
+        $this->normalizeSelectedCoAdmins();
+        
         $validated = $this->validate();
         
-        $validated['created_by_user_id'] = Auth::id();
+        $bannerPath = null;
+        if ($this->banner) {
+            $bannerPath = $this->banner->store('league-banners', 'public');
+        }
 
-        League::create($validated);
+        $league = League::create([
+            'name' => $validated['name'],
+            'slug' => $validated['slug'],
+            'description' => $validated['description'] ?? null,
+            'banner_path' => $bannerPath,
+            'discord_invite_link' => $validated['discord_invite_link'] ?? null,
+            'created_by_user_id' => Auth::id(),
+        ]);
+
+        // Sync Co-Admins
+        $coAdmins = $this->getSelectedCoAdminsArray();
+        $league->coAdmins()->sync(array_map('intval', $coAdmins));
 
         $this->dispatch('notify', title: __('Liga erstellt'));
 
@@ -102,7 +153,7 @@ new class extends Component {
                     :label="__('Name')"
                     type="text"
                     required
-                    :placeholder="__('z.B. Sommer Liga 2025')"
+                    :placeholder="__('z.B. Deutsche Dart Liga')"
                 />
 
                 <flux:input
@@ -120,97 +171,72 @@ new class extends Component {
                     :placeholder="__('Optionale Beschreibung der Liga...')"
                 />
 
-                <div class="grid gap-4 md:grid-cols-2">
-                    <flux:input
-                        wire:model="max_players"
-                        :label="__('Maximale Spielerzahl')"
-                        type="number"
-                        min="2"
-                        max="100"
-                        required
-                    />
-
-                    <flux:input
-                        wire:model="days_per_matchday"
-                        :label="__('Tage pro Spieltag')"
-                        type="number"
-                        min="1"
-                        max="30"
-                        required
-                    />
-                </div>
-
                 <flux:input
-                    wire:model="registration_deadline"
-                    :label="__('Anmeldeschluss (optional)')"
-                    type="datetime-local"
+                    wire:model="discord_invite_link"
+                    :label="__('Discord-Invite-Link (optional)')"
+                    type="url"
+                    :placeholder="__('https://discord.gg/...')"
+                    help="{{ __('Optionaler Discord-Server-Link für diese Liga') }}"
                 />
+
+                <div>
+                    <flux:file-upload wire:model="banner" :label="__('Banner (optional)')">
+                        <flux:file-upload.dropzone 
+                            heading="{{ __('Banner hochladen') }}" 
+                            text="{{ __('JPG, PNG bis zu 5MB') }}" 
+                        />
+                    </flux:file-upload>
+
+                    @if ($banner)
+                        <div class="mt-3">
+                            <flux:file-item
+                                :heading="$banner->getClientOriginalName()"
+                                :image="$banner->temporaryUrl()"
+                                :size="$banner->getSize()"
+                            >
+                                <x-slot name="actions">
+                                    <flux:file-item.remove wire:click="$set('banner', null)" aria-label="{{ __('Banner entfernen') }}" />
+                                </x-slot>
+                            </flux:file-item>
+                        </div>
+                    @endif
+
+                    @error('banner')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
             </div>
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-            <flux:heading size="lg" class="mb-4">{{ __('Spieleinstellungen') }}</flux:heading>
+            <flux:heading size="lg" class="mb-4">{{ __('Co-Administratoren') }}</flux:heading>
 
             <div class="space-y-4">
-                <flux:select
-                    wire:model="mode"
-                    :label="__('Modus')"
-                    required
-                >
-                    @foreach ($modes as $modeOption)
-                        <option value="{{ $modeOption->value }}">
-                            {{ match($modeOption->value) {
-                                'single_round' => __('Nur Hinrunde'),
-                                'double_round' => __('Hin & Rückrunde'),
-                                default => $modeOption->name
-                            } }}
-                        </option>
-                    @endforeach
-                </flux:select>
+                <flux:input
+                    wire:model.live.debounce.300ms="coAdminSearch"
+                    :label="__('Benutzer suchen')"
+                    type="text"
+                    icon="magnifying-glass"
+                    :placeholder="__('Name oder E-Mail eingeben...')"
+                />
 
-                <flux:select
-                    wire:model="variant"
-                    :label="__('Spielvariante')"
-                    required
+                <flux:pillbox
+                    wire:model.live="selectedCoAdmins"
+                    :label="__('Co-Administratoren')"
+                    searchable
+                    :placeholder="__('Co-Administratoren auswählen...')"
+                    :search:placeholder="__('Benutzer suchen...')"
                 >
-                    @foreach ($variants as $variantOption)
-                        <option value="{{ $variantOption->value }}">
-                            {{ match($variantOption->value) {
-                                '501_single_single' => __('501 Single-In Single-Out'),
-                                '501_single_double' => __('501 Single-In Double-Out'),
-                                default => $variantOption->name
-                            } }}
-                        </option>
+                    @foreach ($users as $user)
+                        <flux:pillbox.option value="{{ $user->id }}">
+                            {{ $user->name }} ({{ $user->email }})
+                        </flux:pillbox.option>
                     @endforeach
-                </flux:select>
+                </flux:pillbox>
 
-                <flux:select
-                    wire:model="match_format"
-                    :label="__('Spiellänge')"
-                    required
-                >
-                    @foreach ($formats as $format)
-                        <option value="{{ $format->value }}">
-                            {{ match($format->value) {
-                                'best_of_3' => __('Best of 3'),
-                                'best_of_5' => __('Best of 5'),
-                                default => $format->name
-                            } }}
-                        </option>
-                    @endforeach
-                </flux:select>
-
-                <flux:select
-                    wire:model="status"
-                    :label="__('Status')"
-                    required
-                >
-                    @foreach ($statuses as $statusOption)
-                        <option value="{{ $statusOption->value }}">
-                            {{ __(ucfirst($statusOption->name)) }}
-                        </option>
-                    @endforeach
-                </flux:select>
+                @error('selectedCoAdmins')
+                    <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 
@@ -230,5 +256,3 @@ new class extends Component {
         </div>
     </form>
 </section>
-
-

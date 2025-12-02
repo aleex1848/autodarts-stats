@@ -9,7 +9,8 @@ use App\Enums\LeagueStatus;
 use App\Enums\LeagueVariant;
 use App\Models\DartMatch;
 use App\Models\League;
-use App\Models\LeagueParticipant;
+use App\Models\Season;
+use App\Models\SeasonParticipant;
 use App\Models\MatchdayFixture;
 use App\Models\MatchPlayer;
 use App\Models\Player;
@@ -67,7 +68,18 @@ class SimulateLeagueCommand extends Command
             $this->info('Erstelle Liga...');
             $league = League::create([
                 'name' => 'Test Liga ' . now()->format('Y-m-d H:i'),
+                'slug' => 'test-liga-' . now()->format('Y-m-d-h-i'),
                 'description' => 'Automatisch generierte Test-Liga',
+                'created_by_user_id' => $users->first()->id,
+            ]);
+
+            // 3. Saison erstellen
+            $this->info('Erstelle Saison...');
+            $season = Season::create([
+                'league_id' => $league->id,
+                'name' => 'Saison ' . now()->format('Y'),
+                'slug' => 'saison-' . now()->format('Y'),
+                'description' => 'Automatisch generierte Test-Saison',
                 'max_players' => $playerCount,
                 'mode' => $mode === 'single_round' ? LeagueMode::SingleRound->value : LeagueMode::DoubleRound->value,
                 'variant' => LeagueVariant::Single501DoubleOut->value,
@@ -78,46 +90,47 @@ class SimulateLeagueCommand extends Command
                 'created_by_user_id' => $users->first()->id,
             ]);
 
-            // 3. Teilnehmer registrieren
+            // 4. Teilnehmer registrieren
             $this->info('Registriere Teilnehmer...');
             foreach ($players as $player) {
-                LeagueParticipant::create([
-                    'league_id' => $league->id,
+                SeasonParticipant::create([
+                    'season_id' => $season->id,
                     'player_id' => $player->id,
                 ]);
             }
 
-            // 4. Spielplan generieren
+            // 5. Spielplan generieren
             $this->info('Generiere Spielplan...');
             $scheduler = new LeagueScheduler();
-            $scheduler->generateMatchdays($league, $league->participants);
+            $scheduler->generateMatchdays($season, $season->participants);
 
-            $totalFixtures = $league->matchdays()->withCount('fixtures')->get()->sum('fixtures_count');
-            $this->info("Spielplan erstellt: {$league->matchdays()->count()} Spieltage mit {$totalFixtures} Matches");
+            $totalFixtures = $season->matchdays()->withCount('fixtures')->get()->sum('fixtures_count');
+            $this->info("Spielplan erstellt: {$season->matchdays()->count()} Spieltage mit {$totalFixtures} Matches");
 
-            // 5. Matches für alle Fixtures erstellen
+            // 6. Matches für alle Fixtures erstellen
             $this->info('Erstelle Matches...');
             $progressBar = $this->output->createProgressBar($totalFixtures);
             $progressBar->start();
 
             $standingsCalculator = new LeagueStandingsCalculator();
 
-            foreach ($league->matchdays as $matchday) {
+            foreach ($season->matchdays as $matchday) {
                 foreach ($matchday->fixtures as $fixture) {
                     $this->createMatchForFixture($fixture);
                     $progressBar->advance();
 
                     // Tabellenstände nach jedem Match aktualisieren
-                    $standingsCalculator->calculateStandings($league);
+                    $standingsCalculator->calculateStandings($season);
                 }
             }
 
             $progressBar->finish();
             $this->newLine(2);
 
-            $this->info("✓ Liga erfolgreich erstellt!");
+            $this->info("✓ Liga und Saison erfolgreich erstellt!");
             $this->info("  Liga ID: {$league->id}");
-            $this->info("  Spieltage: {$league->matchdays()->count()}");
+            $this->info("  Saison ID: {$season->id}");
+            $this->info("  Spieltage: {$season->matchdays()->count()}");
             $this->info("  Matches: {$totalFixtures}");
 
             return self::SUCCESS;

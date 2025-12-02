@@ -106,6 +106,11 @@ class User extends Authenticatable
         return $this->hasMany(LeagueRegistration::class);
     }
 
+    public function seasonRegistrations(): HasMany
+    {
+        return $this->hasMany(SeasonRegistration::class);
+    }
+
     /**
      * Get all leagues where the user is registered or is a participant
      *
@@ -120,27 +125,33 @@ class User extends Authenticatable
 
         $leagueIds = collect();
 
-        // Get league IDs from registrations by user_id
-        $registeredByUserId = League::whereHas('registrations', function ($query) {
-            $query->where('user_id', $this->id);
-        })->pluck('id');
+        // Get league IDs from season registrations by user_id
+        $seasonRegistrationsByUserId = \App\Models\SeasonRegistration::where('user_id', $this->id)
+            ->with('season.league')
+            ->get()
+            ->pluck('season.league_id')
+            ->filter();
 
-        $leagueIds = $leagueIds->merge($registeredByUserId);
+        $leagueIds = $leagueIds->merge($seasonRegistrationsByUserId);
 
-        // Get league IDs from registrations by player_id (if player exists)
+        // Get league IDs from season registrations by player_id (if player exists)
         if ($this->player) {
-            $registeredByPlayerId = League::whereHas('registrations', function ($query) {
-                $query->where('player_id', $this->player->id);
-            })->pluck('id');
+            $seasonRegistrationsByPlayerId = \App\Models\SeasonRegistration::where('player_id', $this->player->id)
+                ->with('season.league')
+                ->get()
+                ->pluck('season.league_id')
+                ->filter();
 
-            $leagueIds = $leagueIds->merge($registeredByPlayerId);
+            $leagueIds = $leagueIds->merge($seasonRegistrationsByPlayerId);
 
-            // Get league IDs from participants (through player)
-            $participantLeagueIds = League::whereHas('participants', function ($query) {
-                $query->where('player_id', $this->player->id);
-            })->pluck('id');
+            // Get league IDs from season participants (through player)
+            $seasonParticipants = \App\Models\SeasonParticipant::where('player_id', $this->player->id)
+                ->with('season.league')
+                ->get()
+                ->pluck('season.league_id')
+                ->filter();
 
-            $leagueIds = $leagueIds->merge($participantLeagueIds);
+            $leagueIds = $leagueIds->merge($seasonParticipants);
         }
 
         // Get unique league IDs and fetch the leagues
@@ -197,7 +208,7 @@ class User extends Authenticatable
             ->with([
                 'homePlayer',
                 'awayPlayer',
-                'matchday.league',
+                'matchday.season.league',
             ])
             ->orderBy('matchday_id')
             ->get();

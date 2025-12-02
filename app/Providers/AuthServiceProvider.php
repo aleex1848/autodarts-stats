@@ -5,9 +5,11 @@ namespace App\Providers;
 use App\Enums\RoleName;
 use App\Models\DartMatch;
 use App\Models\League;
+use App\Models\Season;
 use App\Models\User;
 use App\Policies\DartMatchPolicy;
 use App\Policies\LeaguePolicy;
+use App\Policies\SeasonPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -19,6 +21,7 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         DartMatch::class => DartMatchPolicy::class,
         League::class => LeaguePolicy::class,
+        Season::class => SeasonPolicy::class,
     ];
 
     /**

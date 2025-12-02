@@ -16,7 +16,7 @@ new class extends Component {
             ->with([
                 'homePlayer.user',
                 'awayPlayer.user',
-                'matchday.league',
+                'matchday.season.league',
             ])
             ->join('matchdays', 'matchday_fixtures.matchday_id', '=', 'matchdays.id')
             ->orderBy('matchdays.deadline_at', 'asc')
@@ -56,7 +56,7 @@ new class extends Component {
                             @if ($fixture->matchday)
                                 <div class="flex items-center gap-1 mb-2">
                                     <flux:badge size="xs" variant="subtle">
-                                        {{ $fixture->matchday->league->slug }}
+                                        {{ $fixture->matchday->season->league->slug }}
                                     </flux:badge>
                                     <flux:badge size="xs" variant="subtle">
                                         {{ __('Spieltag :number', ['number' => $fixture->matchday->matchday_number]) }}

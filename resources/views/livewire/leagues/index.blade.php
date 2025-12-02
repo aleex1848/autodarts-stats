@@ -1,17 +1,16 @@
 <?php
 
-use App\Enums\LeagueStatus;
-use App\Enums\RegistrationStatus;
 use App\Models\League;
-use App\Models\LeagueRegistration;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
 
-    public string $tab = 'available';
+    public string $search = '';
     public ?int $playerId = null;
 
     public function mount(): void
@@ -19,82 +18,25 @@ new class extends Component {
         $this->playerId = Auth::user()?->player?->id;
     }
 
+    public function updatingSearch(): void
+    {
+        $this->resetPage();
+    }
+
     public function with(): array
     {
+        $query = League::query()
+            ->with(['creator'])
+            ->withCount('seasons');
+
+        if ($this->search !== '') {
+            $query->where('name', 'like', '%' . $this->search . '%');
+        }
+
         return [
-            'availableLeagues' => League::query()
-                ->where('status', LeagueStatus::Registration->value)
-                ->whereDoesntHave('registrations', function ($query) {
-                    $query->where('player_id', $this->playerId);
-                })
-                ->withCount(['participants', 'registrations'])
-                ->orderByDesc('created_at')
-                ->paginate(10, pageName: 'available'),
-
-            'myLeagues' => $this->playerId
-                ? League::query()
-                    ->whereHas('participants', function ($query) {
-                        $query->where('player_id', $this->playerId);
-                    })
-                    ->whereIn('status', [LeagueStatus::Registration->value, LeagueStatus::Active->value])
-                    ->with(['participants.player'])
-                    ->orderByDesc('created_at')
-                    ->paginate(10, pageName: 'my')
-                : collect(),
-
-            'completedLeagues' => $this->playerId
-                ? League::query()
-                    ->whereHas('participants', function ($query) {
-                        $query->where('player_id', $this->playerId);
-                    })
-                    ->where('status', LeagueStatus::Completed->value)
-                    ->with(['participants.player'])
-                    ->orderByDesc('created_at')
-                    ->paginate(10, pageName: 'completed')
-                : collect(),
-
+            'leagues' => $query->orderByDesc('created_at')->paginate(12),
             'player' => Auth::user()?->player,
         ];
-    }
-
-    public function register(int $leagueId): void
-    {
-        if (!$this->playerId) {
-            $this->dispatch('notify', title: __('Kein Player verknüpft'), variant: 'error');
-            
-            return;
-        }
-
-        $league = League::findOrFail($leagueId);
-
-        if ($league->status !== LeagueStatus::Registration->value) {
-            $this->dispatch('notify', title: __('Anmeldung nicht möglich'), variant: 'error');
-            
-            return;
-        }
-
-        LeagueRegistration::firstOrCreate([
-            'league_id' => $leagueId,
-            'player_id' => $this->playerId,
-            'user_id' => Auth::id(),
-        ], [
-            'status' => RegistrationStatus::Pending->value,
-            'registered_at' => now(),
-        ]);
-
-        $this->dispatch('notify', title: __('Anmeldung eingereicht'));
-    }
-
-    public function unregister(int $leagueId): void
-    {
-        $registration = LeagueRegistration::where('league_id', $leagueId)
-            ->where('player_id', $this->playerId)
-            ->first();
-
-        if ($registration) {
-            $registration->delete();
-            $this->dispatch('notify', title: __('Anmeldung zurückgezogen'));
-        }
     }
 }; ?>
 
@@ -102,7 +44,7 @@ new class extends Component {
     <div>
         <flux:heading size="xl">{{ __('Ligen') }}</flux:heading>
         <flux:subheading>
-            {{ __('Melde dich für Ligen an oder sieh deine Teilnahmen an') }}
+            {{ __('Alle verfügbaren Ligen') }}
         </flux:subheading>
     </div>
 
@@ -112,186 +54,55 @@ new class extends Component {
         </flux:callout>
     @endif
 
-    <div class="flex gap-2 border-b border-zinc-200 dark:border-zinc-700">
-        <button
-            wire:click="$set('tab', 'available')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $tab === 'available' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
-        >
-            {{ __('Verfügbare Ligen') }}
-        </button>
+    <flux:input
+        wire:model.live.debounce.300ms="search"
+        icon="magnifying-glass"
+        :placeholder="__('Liga suchen...')"
+    />
 
-        <button
-            wire:click="$set('tab', 'my')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $tab === 'my' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
-        >
-            {{ __('Meine Ligen') }}
-        </button>
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        @forelse ($leagues as $league)
+            <div wire:key="league-{{ $league->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                @if ($league->banner_path)
+                    <div class="mb-4 overflow-hidden rounded-lg">
+                        <img src="{{ Storage::url($league->banner_path) }}" alt="{{ $league->name }}" class="h-32 w-full object-cover" />
+                    </div>
+                @endif
 
-        <button
-            wire:click="$set('tab', 'completed')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $tab === 'completed' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
-        >
-            {{ __('Abgeschlossene Ligen') }}
-        </button>
+                <flux:heading size="md" class="mb-2">{{ $league->name }}</flux:heading>
+
+                @if ($league->description)
+                    <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{{ Str::limit($league->description, 100) }}</p>
+                @endif
+
+                <div class="mb-4 space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-zinc-500 dark:text-zinc-400">{{ __('Saisons') }}</span>
+                        <span class="font-medium">{{ $league->seasons_count }}</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <flux:button
+                        variant="outline"
+                        :href="route('leagues.show', $league)"
+                        wire:navigate
+                        class="flex-1"
+                    >
+                        {{ __('Details') }}
+                    </flux:button>
+                </div>
+            </div>
+        @empty
+            <div class="col-span-full">
+                <flux:callout variant="info" icon="information-circle">
+                    {{ __('Keine Ligen vorhanden.') }}
+                </flux:callout>
+            </div>
+        @endforelse
     </div>
 
-    @if ($tab === 'available')
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            @forelse ($availableLeagues as $league)
-                <div wire:key="available-league-{{ $league->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                    <div class="mb-4">
-                        <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                            {{ $league->name }}
-                        </h3>
-                        @if ($league->description)
-                            <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ $league->description }}
-                            </p>
-                        @endif
-                    </div>
-
-                    <dl class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Modus') }}</dt>
-                            <dd class="font-medium text-zinc-900 dark:text-zinc-100">
-                                {{ match($league->mode) {
-                                    'single_round' => __('Hinrunde'),
-                                    'double_round' => __('Hin & Rückrunde'),
-                                    default => $league->mode
-                                } }}
-                            </dd>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Anmeldungen') }}</dt>
-                            <dd class="font-medium text-zinc-900 dark:text-zinc-100">
-                                {{ $league->registrations_count }} / {{ $league->max_players }}
-                            </dd>
-                        </div>
-
-                        @if ($league->registration_deadline)
-                            <div class="flex justify-between">
-                                <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Deadline') }}</dt>
-                                <dd class="font-medium text-zinc-900 dark:text-zinc-100">
-                                    {{ $league->registration_deadline->format('d.m.Y') }}
-                                </dd>
-                            </div>
-                        @endif
-                    </dl>
-
-                    <div class="mt-4">
-                        @if ($player)
-                            <flux:button wire:click="register({{ $league->id }})" variant="primary" class="w-full">
-                                {{ __('Anmelden') }}
-                            </flux:button>
-                        @else
-                            <flux:button disabled class="w-full">
-                                {{ __('Kein Player') }}
-                            </flux:button>
-                        @endif
-                    </div>
-                </div>
-            @empty
-                <div class="col-span-full">
-                    <flux:callout variant="info" icon="information-circle">
-                        {{ __('Keine verfügbaren Ligen.') }}
-                    </flux:callout>
-                </div>
-            @endforelse
-        </div>
-
-        <div>
-            {{ $availableLeagues->links(data: ['scrollTo' => false]) }}
-        </div>
-    @endif
-
-    @if ($tab === 'my')
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            @forelse ($myLeagues as $league)
-                <div wire:key="my-league-{{ $league->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                    <div class="mb-4 flex items-start justify-between">
-                        <div class="flex-1">
-                            <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                                {{ $league->name }}
-                            </h3>
-                            <flux:badge
-                                size="sm"
-                                class="mt-2"
-                                :variant="$league->status === 'active' ? 'success' : 'primary'"
-                            >
-                                {{ __(ucfirst($league->status)) }}
-                            </flux:badge>
-                        </div>
-                    </div>
-
-                    @if ($league->description)
-                        <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-                            {{ Str::limit($league->description, 100) }}
-                        </p>
-                    @endif
-
-                    <flux:button
-                        :href="route('leagues.show', $league)"
-                        wire:navigate
-                        variant="outline"
-                        class="w-full"
-                    >
-                        {{ __('Details ansehen') }}
-                    </flux:button>
-                </div>
-            @empty
-                <div class="col-span-full">
-                    <flux:callout variant="info" icon="information-circle">
-                        {{ __('Du nimmst derzeit an keinen Ligen teil.') }}
-                    </flux:callout>
-                </div>
-            @endforelse
-        </div>
-
-        @if ($myLeagues instanceof \Illuminate\Pagination\LengthAwarePaginator)
-            <div>
-                {{ $myLeagues->links(data: ['scrollTo' => false]) }}
-            </div>
-        @endif
-    @endif
-
-    @if ($tab === 'completed')
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            @forelse ($completedLeagues as $league)
-                <div wire:key="completed-league-{{ $league->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                    <div class="mb-4">
-                        <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                            {{ $league->name }}
-                        </h3>
-                        <flux:badge size="sm" class="mt-2" variant="subtle">
-                            {{ __('Abgeschlossen') }}
-                        </flux:badge>
-                    </div>
-
-                    <flux:button
-                        :href="route('leagues.show', $league)"
-                        wire:navigate
-                        variant="outline"
-                        class="w-full"
-                    >
-                        {{ __('Ergebnisse ansehen') }}
-                    </flux:button>
-                </div>
-            @empty
-                <div class="col-span-full">
-                    <flux:callout variant="info" icon="information-circle">
-                        {{ __('Du hast noch an keinen abgeschlossenen Ligen teilgenommen.') }}
-                    </flux:callout>
-                </div>
-            @endforelse
-        </div>
-
-        @if ($completedLeagues instanceof \Illuminate\Pagination\LengthAwarePaginator)
-            <div>
-                {{ $completedLeagues->links(data: ['scrollTo' => false]) }}
-            </div>
-        @endif
-    @endif
+    <div>
+        {{ $leagues->links(data: ['scrollTo' => false]) }}
+    </div>
 </section>
-
-

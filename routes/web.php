@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\DiscordController;
 use App\Models\DartMatch;
 use App\Models\Download;
 use App\Models\League;
+use App\Models\Season;
 use App\Models\User;
 use App\Services\MatchExportService;
 use App\Services\MatchImportService;
@@ -26,6 +27,7 @@ Route::get('/auth/discord/callback', [DiscordController::class, 'callback'])->na
 
 Route::model('match', DartMatch::class);
 Route::model('league', League::class);
+Route::model('season', Season::class);
 Route::model('download', Download::class);
 Route::model('user', User::class);
 
@@ -61,6 +63,10 @@ Route::middleware(['auth', 'verified'])
         Volt::route('leagues/{league}', 'leagues.show')
             ->middleware('can:view,league')
             ->name('leagues.show');
+
+        Volt::route('seasons/{season}', 'seasons.show')
+            ->middleware('can:view,season')
+            ->name('seasons.show');
 
         Volt::route('users/{user}', 'users.show')->name('users.show');
 
@@ -138,6 +144,15 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         Volt::route('admin/leagues/{league}/edit', 'admin.leagues.edit')
             ->middleware('can:update,league')
             ->name('leagues.edit');
+
+        // Season routes
+        Volt::route('admin/seasons/create', 'admin.seasons.create')->name('seasons.create');
+        Volt::route('admin/seasons/{season}', 'admin.seasons.show')
+            ->middleware('can:view,season')
+            ->name('seasons.show');
+        Volt::route('admin/seasons/{season}/edit', 'admin.seasons.edit')
+            ->middleware('can:update,season')
+            ->name('seasons.edit');
         // Export route
         Route::get('admin/matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
             $data = $exportService->exportMatch($match);

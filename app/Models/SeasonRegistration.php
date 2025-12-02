@@ -5,27 +5,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Matchday extends Model
+class SeasonRegistration extends Model
 {
     use HasFactory;
 
+    protected $table = 'season_registrations';
+
     protected $fillable = [
         'season_id',
-        'matchday_number',
-        'is_return_round',
-        'deadline_at',
-        'is_playoff',
+        'player_id',
+        'user_id',
+        'status',
+        'registered_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'matchday_number' => 'integer',
-            'is_return_round' => 'boolean',
-            'deadline_at' => 'datetime',
-            'is_playoff' => 'boolean',
+            'registered_at' => 'datetime',
         ];
     }
 
@@ -34,8 +32,13 @@ class Matchday extends Model
         return $this->belongsTo(Season::class);
     }
 
-    public function fixtures(): HasMany
+    public function player(): BelongsTo
     {
-        return $this->hasMany(MatchdayFixture::class);
+        return $this->belongsTo(Player::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

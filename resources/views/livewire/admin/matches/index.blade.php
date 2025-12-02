@@ -49,7 +49,7 @@ new class extends Component {
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
                 'players.user',
                 'winner',
-                'fixture.matchday.league',
+                'fixture.matchday.season.league',
             ])
             ->when($this->statusFilter === 'finished', fn ($query) => $query->whereNotNull('finished_at'))
             ->when($this->statusFilter === 'ongoing', fn ($query) => $query->whereNull('finished_at'))
@@ -231,7 +231,7 @@ new class extends Component {
                                     @if ($match->fixture?->matchday)
                                         <div class="flex items-center gap-1">
                                             <flux:badge size="xs" variant="subtle">
-                                                {{ $match->fixture->matchday->league->slug }}
+                                                {{ $match->fixture->matchday->season->league->slug }}
                                             </flux:badge>
                                             <flux:badge size="xs" variant="subtle">
                                                 {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}

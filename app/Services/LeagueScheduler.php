@@ -4,14 +4,14 @@ namespace App\Services;
 
 use App\Enums\FixtureStatus;
 use App\Enums\LeagueMode;
-use App\Models\League;
+use App\Models\Season;
 use App\Models\Matchday;
 use App\Models\MatchdayFixture;
 use Illuminate\Support\Collection;
 
 class LeagueScheduler
 {
-    public function generateMatchdays(League $league, Collection $participants): void
+    public function generateMatchdays(Season $season, Collection $participants): void
     {
         $playerIds = $participants->pluck('player_id')->toArray();
         $playerCount = count($playerIds);
@@ -21,15 +21,15 @@ class LeagueScheduler
         }
 
         // Generate first round
-        $this->generateRound($league, $playerIds, false);
+        $this->generateRound($season, $playerIds, false);
 
         // Generate return round if double round mode
-        if ($league->mode === LeagueMode::DoubleRound->value) {
-            $this->generateReturnRound($league);
+        if ($season->mode === LeagueMode::DoubleRound->value) {
+            $this->generateReturnRound($season);
         }
     }
 
-    protected function generateRound(League $league, array $playerIds, bool $isReturnRound): void
+    protected function generateRound(Season $season, array $playerIds, bool $isReturnRound): void
     {
         $playerCount = count($playerIds);
 
@@ -47,10 +47,10 @@ class LeagueScheduler
             $matchdayNumber = $isReturnRound ? $rounds + $round + 1 : $round + 1;
 
             $matchday = Matchday::create([
-                'league_id' => $league->id,
+                'season_id' => $season->id,
                 'matchday_number' => $matchdayNumber,
                 'is_return_round' => $isReturnRound,
-                'deadline_at' => $this->calculateDeadline($league, $matchdayNumber),
+                'deadline_at' => $this->calculateDeadline($season, $matchdayNumber),
                 'is_playoff' => false,
             ]);
 
@@ -83,25 +83,25 @@ class LeagueScheduler
         }
     }
 
-    public function generateReturnRound(League $league): void
+    public function generateReturnRound(Season $season): void
     {
         // Get all participants
-        $participants = $league->participants;
+        $participants = $season->participants;
         $playerIds = $participants->pluck('player_id')->toArray();
 
-        $this->generateRound($league, $playerIds, true);
+        $this->generateRound($season, $playerIds, true);
     }
 
-    public function generatePlayoffMatchday(League $league, array $players): Matchday
+    public function generatePlayoffMatchday(Season $season, array $players): Matchday
     {
-        $lastMatchday = $league->matchdays()->orderByDesc('matchday_number')->first();
+        $lastMatchday = $season->matchdays()->orderByDesc('matchday_number')->first();
         $matchdayNumber = $lastMatchday ? $lastMatchday->matchday_number + 1 : 1;
 
         $matchday = Matchday::create([
-            'league_id' => $league->id,
+            'season_id' => $season->id,
             'matchday_number' => $matchdayNumber,
             'is_return_round' => false,
-            'deadline_at' => $this->calculateDeadline($league, $matchdayNumber),
+            'deadline_at' => $this->calculateDeadline($season, $matchdayNumber),
             'is_playoff' => true,
         ]);
 
@@ -120,13 +120,13 @@ class LeagueScheduler
         return $matchday;
     }
 
-    protected function calculateDeadline(League $league, int $matchdayNumber): ?\DateTime
+    protected function calculateDeadline(Season $season, int $matchdayNumber): ?\DateTime
     {
-        if (! $league->days_per_matchday) {
+        if (! $season->days_per_matchday) {
             return null;
         }
 
-        $startDate = $league->registration_deadline ?? now();
+        $startDate = $season->registration_deadline ?? now();
 
         return (clone $startDate)->modify("+{$matchdayNumber} weeks");
     }

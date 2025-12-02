@@ -28,7 +28,7 @@ new class extends Component {
             ->with([
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
                 'winner',
-                'fixture.matchday.league',
+                'fixture.matchday.season.league',
             ])
             ->orderByDesc('finished_at')
             ->orderByDesc('id')
@@ -279,7 +279,7 @@ new class extends Component {
                                         @if ($fixture->matchday)
                                             <div class="flex items-center gap-1 mb-2">
                                                 <flux:badge size="xs" variant="subtle">
-                                                    {{ $fixture->matchday->league->slug }}
+                                                    {{ $fixture->matchday->season->league->slug }}
                                                 </flux:badge>
                                                 <flux:badge size="xs" variant="subtle">
                                                     {{ __('Spieltag :number', ['number' => $fixture->matchday->matchday_number]) }}
