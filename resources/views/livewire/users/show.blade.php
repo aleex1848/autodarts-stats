@@ -200,7 +200,7 @@ new class extends Component {
                                             <div class="flex flex-col">
                                                 <div class="flex items-center gap-2 flex-wrap">
                                                     <span class="font-semibold">{{ $match->variant }} · {{ $match->type }}</span>
-                                                    @if ($match->fixture?->matchday)
+                                                    @if ($match->fixture?->matchday?->league)
                                                         <div class="flex items-center gap-1">
                                                             <flux:badge size="xs" variant="subtle">
                                                                 {{ $match->fixture->matchday->league->slug }}
@@ -276,7 +276,7 @@ new class extends Component {
                             >
                                 <div class="flex items-start justify-between gap-4">
                                     <div class="flex-1 min-w-0">
-                                        @if ($fixture->matchday)
+                                        @if ($fixture->matchday?->season?->league)
                                             <div class="flex items-center gap-1 mb-2">
                                                 <flux:badge size="xs" variant="subtle">
                                                     {{ $fixture->matchday->season->league->slug }}
