@@ -5,12 +5,14 @@ use App\Services\LeagueStandingsCalculator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new class extends Component {
     #[Locked]
     public Season $season;
 
+    #[Url(as: 'activeTab')]
     public string $activeTab = 'overview';
     public ?int $playerId = null;
     public ?int $playingMatchdayId = null;
@@ -28,7 +30,13 @@ new class extends Component {
         ]);
         
         $this->playerId = Auth::user()?->player?->id;
-        $this->refreshStatus();
+        $this->refreshStatus();        
+        
+        // Validate activeTab value
+        $validTabs = ['overview', 'schedule', 'standings', 'results'];
+        if (!in_array($this->activeTab, $validTabs)) {
+            $this->activeTab = 'overview';
+        }
     }
 
     public function getListeners(): array
