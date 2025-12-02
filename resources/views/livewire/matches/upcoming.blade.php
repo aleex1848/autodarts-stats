@@ -55,12 +55,12 @@ new class extends Component {
                         <div class="flex-1 min-w-0">
                             @if ($fixture->matchday)
                                 <div class="flex items-center gap-1 mb-2">
-                                    <a href="{{ route('leagues.show', $fixture->matchday->season->league) }}" wire:navigate onclick="event.stopPropagation()">
+                                    <a href="{{ route('seasons.show', $fixture->matchday->season) }}?activeTab=standings" wire:navigate onclick="event.stopPropagation()">
                                         <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
-                                            {{ $fixture->matchday->season->league->slug }}
+                                            {{ $fixture->matchday->season->league->slug }} {{ $fixture->matchday->season->slug }}
                                         </flux:badge>
                                     </a>
-                                    <a href="{{ route('seasons.show', $fixture->matchday->season) }}" wire:navigate onclick="event.stopPropagation()">
+                                    <a href="{{ route('seasons.show', $fixture->matchday->season) }}?activeTab=schedule" wire:navigate onclick="event.stopPropagation()">
                                         <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
                                             {{ __('Spieltag :number', ['number' => $fixture->matchday->matchday_number]) }}
                                         </flux:badge>

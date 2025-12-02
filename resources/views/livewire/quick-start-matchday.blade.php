@@ -274,18 +274,18 @@ new class extends Component {
                         <div class="relative flex items-center justify-between gap-4">
                             <div class="relative flex-1 min-w-0 {{ $bannerPath ? 'bg-black/50 dark:bg-black/60 rounded-lg p-4 backdrop-blur-md' : '' }}">
                                 <div class="flex items-center gap-2 mb-2">
-                                    <a href="{{ route('leagues.show', $season->league) }}" wire:navigate>
+                                    <a href="{{ route('seasons.show', $season) }}?activeTab=standings" wire:navigate>
                                         @if($bannerPath)
                                             <flux:badge size="xs" variant="solid" color="{{ $badgeColor }}">
-                                                {{ $season->league->slug }}
+                                                {{ $season->league->slug }} {{ $season->slug }}
                                             </flux:badge>
                                         @else
                                             <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
-                                                {{ $season->league->slug }}
+                                                {{ $season->league->slug }} {{ $season->slug }}
                                             </flux:badge>
                                         @endif
                                     </a>
-                                    <a href="{{ route('seasons.show', $season) }}" wire:navigate>
+                                    <a href="{{ route('seasons.show', $season) }}?activeTab=schedule" wire:navigate>
                                         @if($bannerPath)
                                             <flux:badge size="xs" variant="solid" color="{{ $badgeColor }}">
                                                 {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}

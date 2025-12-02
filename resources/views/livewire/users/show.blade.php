@@ -34,10 +34,64 @@ new class extends Component {
             ->orderByDesc('id')
             ->paginate(10);
 
+        $leagues = $this->user->leagues();
+        
+        // Sammle alle Season-IDs für alle Ligen auf einmal (Performance-Optimierung)
+        $leagueIds = $leagues->pluck('id')->all();
+        $seasonIds = collect();
+        
+        // Seasons aus SeasonRegistrations (über user_id)
+        $seasonRegistrationsByUserId = \App\Models\SeasonRegistration::where('user_id', $this->user->id)
+            ->whereHas('season', function ($query) use ($leagueIds) {
+                $query->whereIn('league_id', $leagueIds);
+            })
+            ->with('season')
+            ->get();
+        
+        $seasonIds = $seasonIds->merge($seasonRegistrationsByUserId->pluck('season_id'));
+        
+        // Seasons aus SeasonRegistrations (über player_id, falls vorhanden)
+        if ($this->user->player) {
+            $seasonRegistrationsByPlayerId = \App\Models\SeasonRegistration::where('player_id', $this->user->player->id)
+                ->whereHas('season', function ($query) use ($leagueIds) {
+                    $query->whereIn('league_id', $leagueIds);
+                })
+                ->with('season')
+                ->get();
+            
+            $seasonIds = $seasonIds->merge($seasonRegistrationsByPlayerId->pluck('season_id'));
+            
+            // Seasons aus SeasonParticipants
+            $seasonParticipants = \App\Models\SeasonParticipant::where('player_id', $this->user->player->id)
+                ->whereHas('season', function ($query) use ($leagueIds) {
+                    $query->whereIn('league_id', $leagueIds);
+                })
+                ->with('season')
+                ->get();
+            
+            $seasonIds = $seasonIds->merge($seasonParticipants->pluck('season_id'));
+        }
+        
+        // Lade alle eindeutigen Seasons auf einmal
+        $uniqueSeasonIds = $seasonIds->unique()->values()->all();
+        $allSeasons = empty($uniqueSeasonIds) 
+            ? collect() 
+            : \App\Models\Season::whereIn('id', $uniqueSeasonIds)
+                ->with('league')
+                ->orderByDesc('created_at')
+                ->get()
+                ->groupBy('league_id');
+        
+        // Ordne die Seasons den Ligen zu
+        $leaguesWithSeasons = $leagues->map(function ($league) use ($allSeasons) {
+            $league->userSeasons = $allSeasons->get($league->id, collect());
+            return $league;
+        });
+
         return [
             'finishedMatches' => $finishedMatches,
             'upcomingFixtures' => $this->user->upcomingFixtures(),
-            'leagues' => $this->user->leagues(),
+            'leagues' => $leaguesWithSeasons,
             'player' => $this->user->player,
         ];
     }
@@ -200,14 +254,18 @@ new class extends Component {
                                             <div class="flex flex-col">
                                                 <div class="flex items-center gap-2 flex-wrap">
                                                     <span class="font-semibold">{{ $match->variant }} · {{ $match->type }}</span>
-                                                    @if ($match->fixture?->matchday?->league)
+                                                    @if ($match->fixture?->matchday?->season)
                                                         <div class="flex items-center gap-1">
-                                                            <flux:badge size="xs" variant="subtle">
-                                                                {{ $match->fixture->matchday->league->slug }}
-                                                            </flux:badge>
-                                                            <flux:badge size="xs" variant="subtle">
-                                                                {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
-                                                            </flux:badge>
+                                                            <a href="{{ route('seasons.show', $match->fixture->matchday->season) }}?activeTab=standings" wire:navigate>
+                                                                <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                                    {{ $match->fixture->matchday->season->league->slug }} {{ $match->fixture->matchday->season->slug }}
+                                                                </flux:badge>
+                                                            </a>
+                                                            <a href="{{ route('seasons.show', $match->fixture->matchday->season) }}?activeTab=schedule" wire:navigate>
+                                                                <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                                    {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
+                                                                </flux:badge>
+                                                            </a>
                                                         </div>
                                                     @endif
                                                 </div>
@@ -276,14 +334,18 @@ new class extends Component {
                             >
                                 <div class="flex items-start justify-between gap-4">
                                     <div class="flex-1 min-w-0">
-                                        @if ($fixture->matchday?->season?->league)
+                                        @if ($fixture->matchday?->season)
                                             <div class="flex items-center gap-1 mb-2">
-                                                <flux:badge size="xs" variant="subtle">
-                                                    {{ $fixture->matchday->season->league->slug }}
-                                                </flux:badge>
-                                                <flux:badge size="xs" variant="subtle">
-                                                    {{ __('Spieltag :number', ['number' => $fixture->matchday->matchday_number]) }}
-                                                </flux:badge>
+                                                <a href="{{ route('seasons.show', $fixture->matchday->season) }}?activeTab=standings" wire:navigate>
+                                                    <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                        {{ $fixture->matchday->season->league->slug }} {{ $fixture->matchday->season->slug }}
+                                                    </flux:badge>
+                                                </a>
+                                                <a href="{{ route('seasons.show', $fixture->matchday->season) }}?activeTab=schedule" wire:navigate>
+                                                    <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                        {{ __('Spieltag :number', ['number' => $fixture->matchday->matchday_number]) }}
+                                                    </flux:badge>
+                                                </a>
                                             </div>
                                         @endif
 
@@ -332,6 +394,31 @@ new class extends Component {
                                         </p>
                                     @endif
                                 </div>
+
+                                @if (isset($league->userSeasons) && $league->userSeasons->count() > 0)
+                                    <div class="mb-4 space-y-2">
+                                        <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                            {{ __('Angemeldete Seasons') }}
+                                        </p>
+                                        <div class="flex flex-wrap gap-2">
+                                            @foreach ($league->userSeasons as $season)
+                                                <a 
+                                                    href="{{ route('seasons.show', $season) }}" 
+                                                    wire:navigate
+                                                    class="inline-block"
+                                                >
+                                                    <flux:badge 
+                                                        size="sm" 
+                                                        variant="subtle"
+                                                        class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+                                                    >
+                                                        {{ $season->name ?? $season->slug }}
+                                                    </flux:badge>
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
 
                                 <div class="flex items-center justify-between">
                                     <flux:badge :variant="match($league->status) {

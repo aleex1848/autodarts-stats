@@ -254,12 +254,16 @@ new class extends Component {
                                         <span class="font-semibold">{{ $match->variant }} · {{ $match->type }}</span>
                                         @if ($match->fixture?->matchday)
                                             <div class="flex items-center gap-1">
-                                                <flux:badge size="xs" variant="subtle">
-                                                    {{ $match->fixture->matchday->season->league->slug }}
-                                                </flux:badge>
-                                                <flux:badge size="xs" variant="subtle">
-                                                    {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
-                                                </flux:badge>
+                                                <a href="{{ route('seasons.show', $match->fixture->matchday->season) }}?activeTab=standings" wire:navigate>
+                                                    <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                        {{ $match->fixture->matchday->season->league->slug }} {{ $match->fixture->matchday->season->slug }}
+                                                    </flux:badge>
+                                                </a>
+                                                <a href="{{ route('seasons.show', $match->fixture->matchday->season) }}?activeTab=schedule" wire:navigate>
+                                                    <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                        {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
+                                                    </flux:badge>
+                                                </a>
                                             </div>
                                         @endif
                                     </div>
