@@ -420,17 +420,7 @@ new class extends Component {
                                     </div>
                                 @endif
 
-                                <div class="flex items-center justify-between">
-                                    <flux:badge :variant="match($league->status) {
-                                        'registration' => 'primary',
-                                        'active' => 'success',
-                                        'completed' => 'subtle',
-                                        'cancelled' => 'danger',
-                                        default => 'subtle'
-                                    }">
-                                        {{ __(ucfirst($league->status)) }}
-                                    </flux:badge>
-
+                                <div class="flex items-center justify-end">
                                     <flux:button
                                         size="sm"
                                         variant="outline"
