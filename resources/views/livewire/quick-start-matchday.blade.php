@@ -153,19 +153,20 @@ new class extends Component {
                         ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
                         ->first();
 
-                    // Only add if user has a fixture in this matchday
+                    // Only add if user has a fixture in this matchday AND it's not completed
                     if ($fixture) {
                         $fixtureCompleted = $fixture->dart_match_id !== null || $fixture->status === 'completed';
                         
+                        // Only show fixtures that are not completed
                         if (!$fixtureCompleted) {
                             $hasUncompletedMatchday = true;
+                            
+                            $relevantMatchdays->push([
+                                'matchday' => $matchday,
+                                'season' => $season,
+                                'fixture' => $fixture,
+                            ]);
                         }
-
-                        $relevantMatchdays->push([
-                            'matchday' => $matchday,
-                            'season' => $season,
-                            'fixture' => $fixture,
-                        ]);
                     }
                 }
             } else {
@@ -181,17 +182,20 @@ new class extends Component {
                         ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
                         ->first();
 
-                    $fixtureCompleted = $fixture && ($fixture->dart_match_id !== null || $fixture->status === 'completed');
-                    
-                    if (!$fixtureCompleted) {
-                        $hasUncompletedMatchday = true;
+                    // Only show fixtures that are not completed
+                    if ($fixture) {
+                        $fixtureCompleted = $fixture->dart_match_id !== null || $fixture->status === 'completed';
+                        
+                        if (!$fixtureCompleted) {
+                            $hasUncompletedMatchday = true;
+                            
+                            $relevantMatchdays->push([
+                                'matchday' => $nextMatchday,
+                                'season' => $season,
+                                'fixture' => $fixture,
+                            ]);
+                        }
                     }
-
-                    $relevantMatchdays->push([
-                        'matchday' => $nextMatchday,
-                        'season' => $season,
-                        'fixture' => $fixture,
-                    ]);
                 }
             }
         }
