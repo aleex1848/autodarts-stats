@@ -27,7 +27,7 @@
     </div>
 
     <!-- Kompakte Info-Karten oben -->
-    <div class="grid gap-4 lg:grid-cols-2">
+    <div class="grid gap-4 {{ $match->fixture ? 'lg:grid-cols-3' : 'lg:grid-cols-2' }}">
         <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <div class="flex items-center justify-between">
                 <flux:heading size="md">{{ __('Matchübersicht') }}</flux:heading>
@@ -112,6 +112,155 @@
                 @endif
             </dl>
         </div>
+
+        @if ($match->fixture)
+            @php
+                $fixture = $match->fixture;
+                $matchday = $fixture->matchday;
+                $season = $matchday->season ?? null;
+                $league = $season->league ?? null;
+                
+                $statusVariant = match($fixture->status) {
+                    'completed' => 'success',
+                    'overdue' => 'danger',
+                    'walkover' => 'warning',
+                    default => 'subtle',
+                };
+                
+                $statusLabel = match($fixture->status) {
+                    'completed' => __('Abgeschlossen'),
+                    'overdue' => __('Überfällig'),
+                    'walkover' => __('Walkover'),
+                    default => __('Geplant'),
+                };
+            @endphp
+            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <div class="flex items-center justify-between">
+                    <flux:heading size="md">{{ __('Ligaspiel') }}</flux:heading>
+                    <flux:badge variant="{{ $statusVariant }}">
+                        {{ $statusLabel }}
+                    </flux:badge>
+                </div>
+
+                <dl class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
+                    @if ($season)
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Saison') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">
+                                <a href="{{ route('seasons.show', ['season' => $season, 'activeTab' => 'standings']) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" wire:navigate>
+                                    {{ $season->name }}
+                                </a>
+                            </dd>
+                        </div>
+                    @endif
+                    
+                    @if ($matchday)
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Spieltag') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">
+                                @if ($season)
+                                    <a href="{{ route('seasons.show', ['season' => $season, 'activeTab' => 'schedule']) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" wire:navigate>
+                                        {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
+                                        @if ($matchday->is_return_round)
+                                            ({{ __('Rückrunde') }})
+                                        @endif
+                                    </a>
+                                @else
+                                    {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
+                                    @if ($matchday->is_return_round)
+                                        ({{ __('Rückrunde') }})
+                                    @endif
+                                @endif
+                            </dd>
+                        </div>
+                    @endif
+                    
+                    @if ($league)
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Liga') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">
+                                <a href="{{ route('leagues.show', $league) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" wire:navigate>
+                                    {{ $league->name }}
+                                </a>
+                            </dd>
+                        </div>
+                    @endif
+                    
+                    <div class="flex justify-between">
+                        <dt class="font-medium text-zinc-500">{{ __('Spieler') }}</dt>
+                        <dd class="text-zinc-900 dark:text-zinc-100">
+                            <div class="text-right">
+                                @if ($fixture->homePlayer)
+                                    <div>
+                                        @if ($fixture->homePlayer->user)
+                                            <a href="{{ route('users.show', $fixture->homePlayer->user) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" target="_blank">
+                                                {{ $fixture->homePlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $fixture->homePlayer->name }}
+                                        @endif
+                                    </div>
+                                @endif
+                                @if ($fixture->awayPlayer)
+                                    <div class="mt-1">
+                                        <span class="text-zinc-500 dark:text-zinc-400">vs</span>
+                                        @if ($fixture->awayPlayer->user)
+                                            <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" class="ml-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" target="_blank">
+                                                {{ $fixture->awayPlayer->name }}
+                                            </a>
+                                        @else
+                                            <span class="ml-1">{{ $fixture->awayPlayer->name }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                        </dd>
+                    </div>
+                    
+                    @if ($fixture->status === 'completed')
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Ergebnis') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100 font-semibold">
+                                {{ $fixture->home_legs_won ?? 0 }} : {{ $fixture->away_legs_won ?? 0 }}
+                            </dd>
+                        </div>
+                        
+                        @if ($fixture->points_awarded_home !== null || $fixture->points_awarded_away !== null)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-500">{{ __('Punkte') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">
+                                    {{ $fixture->points_awarded_home ?? 0 }} : {{ $fixture->points_awarded_away ?? 0 }}
+                                </dd>
+                            </div>
+                        @endif
+                        
+                        @if ($fixture->winner)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-500">{{ __('Gewinner') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">
+                                    @if ($fixture->winner->user)
+                                        <a href="{{ route('users.show', $fixture->winner->user) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" target="_blank">
+                                            {{ $fixture->winner->name }}
+                                        </a>
+                                    @else
+                                        {{ $fixture->winner->name }}
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
+                    @endif
+                    
+                    @if ($fixture->played_at)
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-zinc-500">{{ __('Gespielt am') }}</dt>
+                            <dd class="text-zinc-900 dark:text-zinc-100">
+                                {{ $fixture->played_at->format('d.m.Y H:i') }}
+                            </dd>
+                        </div>
+                    @endif
+                </dl>
+            </div>
+        @endif
     </div>
 
     <!-- Spielerübersicht in voller Breite -->

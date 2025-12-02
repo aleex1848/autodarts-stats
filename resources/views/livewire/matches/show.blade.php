@@ -52,6 +52,10 @@ new class extends Component
             'players.user',
             'winner',
             'bullOffs.player.user',
+            'fixture.matchday.season.league',
+            'fixture.homePlayer.user',
+            'fixture.awayPlayer.user',
+            'fixture.winner',
         ]);
 
         $this->legs = $match->legs()
@@ -94,6 +98,10 @@ new class extends Component
                 'players.user',
                 'winner',
                 'bullOffs.player.user',
+                'fixture.matchday.season.league',
+                'fixture.homePlayer.user',
+                'fixture.awayPlayer.user',
+                'fixture.winner',
             ]);
 
             $this->legs = $this->match->legs()
@@ -128,6 +136,10 @@ new class extends Component
             'players.user',
             'winner',
             'bullOffs.player.user',
+            'fixture.matchday.season.league',
+            'fixture.homePlayer.user',
+            'fixture.awayPlayer.user',
+            'fixture.winner',
         ]);
 
         $this->legs = $this->match->legs()
