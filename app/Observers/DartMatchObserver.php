@@ -17,20 +17,25 @@ class DartMatchObserver
         if ($match->wasChanged('finished_at') && $match->finished_at !== null) {
             $fixture = MatchdayFixture::where('dart_match_id', $match->id)->first();
 
-            if ($fixture && ($fixture->home_legs_won === null || $fixture->away_legs_won === null)) {
-                // Fixture exists but is missing leg stats - update it
-                try {
-                    app(\App\Actions\AssignMatchToFixture::class)->handle($match, $fixture);
-                    Log::info('Fixture updated after match finished', [
-                        'fixture_id' => $fixture->id,
-                        'match_id' => $match->id,
-                    ]);
-                } catch (\Exception $e) {
-                    Log::warning('Failed to update fixture after match finished', [
-                        'fixture_id' => $fixture->id,
-                        'match_id' => $match->id,
-                        'error' => $e->getMessage(),
-                    ]);
+            if ($fixture) {
+                // Update fixture if it's missing leg stats OR if status is still scheduled
+                $needsUpdate = ($fixture->home_legs_won === null || $fixture->away_legs_won === null)
+                    || ($fixture->status === \App\Enums\FixtureStatus::Scheduled->value);
+
+                if ($needsUpdate) {
+                    try {
+                        app(\App\Actions\AssignMatchToFixture::class)->handle($match, $fixture);
+                        Log::info('Fixture updated after match finished', [
+                            'fixture_id' => $fixture->id,
+                            'match_id' => $match->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to update fixture after match finished', [
+                            'fixture_id' => $fixture->id,
+                            'match_id' => $match->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
         }
