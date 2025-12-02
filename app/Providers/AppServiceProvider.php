@@ -6,6 +6,7 @@ use App\Models\DartMatch;
 use App\Observers\DartMatchObserver;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Event;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureSecureUrls();
         DartMatch::observe(DartMatchObserver::class);
+        Event::listen(function (\SocialiteProviders\Manager\SocialiteWasCalled $event) {
+            $event->extendSocialite('discord', \SocialiteProviders\Discord\Provider::class);
+        });
     }
 
     protected function configureSecureUrls()

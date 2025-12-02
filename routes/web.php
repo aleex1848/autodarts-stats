@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\DiscordController;
 use App\Models\DartMatch;
 use App\Models\Download;
 use App\Models\League;
@@ -17,6 +18,10 @@ Route::get('/', function () {
 Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+
+// Discord OAuth routes
+Route::get('/auth/discord/redirect', [DiscordController::class, 'redirect'])->name('discord.redirect');
+Route::get('/auth/discord/callback', [DiscordController::class, 'callback'])->name('discord.callback');
 
 Route::model('match', DartMatch::class);
 Route::model('league', League::class);
