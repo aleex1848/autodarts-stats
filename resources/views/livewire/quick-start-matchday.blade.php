@@ -9,10 +9,20 @@ new class extends Component {
     public ?int $playingMatchdayId = null;
     public ?string $message = null;
     public bool $success = false;
+    public bool $showConfirmModal = false;
+    public ?int $selectedMatchdayId = null;
 
     public function mount(): void
     {
         $this->refreshStatus();
+    }
+
+    public function updatedShowConfirmModal($value): void
+    {
+        if (! $value) {
+            // Modal wurde geschlossen, reset selectedMatchdayId
+            $this->selectedMatchdayId = null;
+        }
     }
 
     public function getListeners(): array
@@ -38,6 +48,35 @@ new class extends Component {
         $this->refreshStatus();
     }
 
+    public function openConfirmModal(int $matchdayId): void
+    {
+        $matchday = Matchday::with('season')->find($matchdayId);
+        
+        if (! $matchday || ! $matchday->season) {
+            // Wenn keine Season-Einstellungen vorhanden, direkt starten
+            $this->startMatchday($matchdayId);
+            return;
+        }
+        
+        $season = $matchday->season;
+        $hasGameSettings = $season->base_score ||
+            $season->in_mode ||
+            $season->out_mode ||
+            $season->bull_mode ||
+            $season->max_rounds ||
+            $season->bull_off ||
+            $season->match_mode_type;
+        
+        if (! $hasGameSettings) {
+            // Wenn keine Einstellungen vorhanden, direkt starten
+            $this->startMatchday($matchdayId);
+            return;
+        }
+        
+        $this->selectedMatchdayId = $matchdayId;
+        $this->showConfirmModal = true;
+    }
+
     public function startMatchday(int $matchdayId): void
     {
         $user = Auth::user();
@@ -45,12 +84,16 @@ new class extends Component {
 
         if (! $matchday) {
             $this->addError('matchday', 'Spieltag nicht gefunden.');
+            $this->showConfirmModal = false;
+            $this->selectedMatchdayId = null;
             return;
         }
 
         // Validate user is participant of the season
         if (! $user->player) {
             $this->addError('matchday', 'Du musst zuerst einen Spieler mit deinem Account verknüpfen.');
+            $this->showConfirmModal = false;
+            $this->selectedMatchdayId = null;
             return;
         }
 
@@ -60,12 +103,16 @@ new class extends Component {
 
         if (! $isParticipant) {
             $this->addError('matchday', 'Du bist kein Teilnehmer dieser Saison.');
+            $this->showConfirmModal = false;
+            $this->selectedMatchdayId = null;
             return;
         }
 
         // Validate matchday is relevant (not past)
         if (! $matchday->isCurrentlyActive() && ! $matchday->isUpcoming()) {
             $this->addError('matchday', 'Dieser Spieltag ist bereits vorbei.');
+            $this->showConfirmModal = false;
+            $this->selectedMatchdayId = null;
             return;
         }
 
@@ -83,6 +130,8 @@ new class extends Component {
             if ($incompleteMatchdays->isNotEmpty()) {
                 $incompleteNumbers = $incompleteMatchdays->pluck('matchday_number')->join(', ');
                 $this->addError('matchday', "Spieltag {$matchday->matchday_number} kann erst gestartet werden, wenn alle vorherigen Spieltage komplett sind. Noch nicht komplett: {$incompleteNumbers}.");
+                $this->showConfirmModal = false;
+                $this->selectedMatchdayId = null;
                 return;
             }
         }
@@ -92,6 +141,8 @@ new class extends Component {
         $this->playingMatchdayId = $matchday->id;
         $this->message = "Spieltag {$matchday->matchday_number} gestartet. Das nächste eingehende Spiel wird diesem Spieltag zugeordnet.";
         $this->success = true;
+        $this->showConfirmModal = false;
+        $this->selectedMatchdayId = null;
         
         // Clear any previous errors
         $this->resetErrorBag();
@@ -388,7 +439,7 @@ new class extends Component {
                                             <flux:button
                                                 variant="primary"
                                                 color="{{ $isActive ? 'green' : 'blue' }}"
-                                                wire:click="startMatchday({{ $matchday->id }})"
+                                                wire:click="openConfirmModal({{ $matchday->id }})"
                                                 wire:loading.attr="disabled"
                                                 icon="play"
                                                 class="font-semibold"
@@ -416,5 +467,116 @@ new class extends Component {
             </div>
         </div>
     </div>
+@endif
+
+{{-- Confirmation Modal mit Season-Einstellungen --}}
+@if ($selectedMatchdayId && $showConfirmModal)
+    @php
+        $selectedMatchday = \App\Models\Matchday::with('season')->find($selectedMatchdayId);
+        $selectedSeason = $selectedMatchday?->season;
+        $hasGameSettings = $selectedSeason && (
+            $selectedSeason->base_score ||
+            $selectedSeason->in_mode ||
+            $selectedSeason->out_mode ||
+            $selectedSeason->bull_mode ||
+            $selectedSeason->max_rounds ||
+            $selectedSeason->bull_off ||
+            $selectedSeason->match_mode_type
+        );
+    @endphp
+    
+    @if ($selectedSeason && $hasGameSettings)
+        <flux:modal wire:model.self="showConfirmModal" class="min-w-[32rem]">
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Spiel starten') }}</flux:heading>
+                    <flux:text class="mt-2">
+                        {{ __('Bitte bestätige, dass du die folgenden Spieleinstellungen für diese Saison kennst:') }}
+                    </flux:text>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800">
+                    <flux:heading size="sm" class="mb-3">{{ __('Geforderte Spieleinstellungen') }}</flux:heading>
+                    <dl class="space-y-2 text-sm">
+                        @if ($selectedSeason->base_score)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Base Score') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->base_score }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->in_mode)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('In Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->in_mode }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->out_mode)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Out Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->out_mode }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->bull_mode)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Bull Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->bull_mode }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->max_rounds)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Max Rounds') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->max_rounds }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->bull_off)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Bull-Off') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">{{ $selectedSeason->bull_off }}</dd>
+                            </div>
+                        @endif
+
+                        @if ($selectedSeason->match_mode_type)
+                            <div class="flex justify-between">
+                                <dt class="font-medium text-zinc-600 dark:text-zinc-400">{{ __('Match Mode') }}</dt>
+                                <dd class="text-zinc-900 dark:text-zinc-100">
+                                    @if ($selectedSeason->match_mode_type === 'Legs' && $selectedSeason->match_mode_legs_count)
+                                        {{ __('Legs - First to :count leg', ['count' => $selectedSeason->match_mode_legs_count]) }}
+                                    @elseif ($selectedSeason->match_mode_type === 'Sets' && $selectedSeason->match_mode_sets_count)
+                                        {{ __('Sets - First to :count sets', ['count' => $selectedSeason->match_mode_sets_count]) }}
+                                        @if ($selectedSeason->match_mode_legs_count)
+                                            · {{ __('First to :count leg', ['count' => $selectedSeason->match_mode_legs_count]) }}
+                                        @endif
+                                    @else
+                                        {{ $selectedSeason->match_mode_type }}
+                                    @endif
+                                </dd>
+                            </div>
+                        @endif
+                    </dl>
+                </div>
+
+                <div class="flex gap-2">
+                    <flux:spacer />
+                    <flux:modal.close>
+                        <flux:button variant="ghost">{{ __('Abbrechen') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button
+                        variant="primary"
+                        color="green"
+                        wire:click="startMatchday({{ $selectedMatchdayId }})"
+                        wire:loading.attr="disabled"
+                        icon="play"
+                    >
+                        {{ __('Spiel starten') }}
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
+    @endif
 @endif
 </div>
