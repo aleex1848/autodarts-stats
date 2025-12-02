@@ -64,6 +64,7 @@ new class extends Component {
         return DartMatch::query()
             ->with([
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+                'players.user',
                 'winner',
                 'fixture.matchday.league',
             ])
@@ -271,7 +272,13 @@ new class extends Component {
                                                 size="sm"
                                                 :variant="$participant->pivot->final_position === 1 ? 'primary' : 'subtle'"
                                             >
-                                                {{ $participant->name ?? __('Player #:id', ['id' => $participant->id]) }}
+                                                @if ($participant->user)
+                                                    <a href="{{ route('users.show', $participant->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                        {{ $participant->name ?? __('Player #:id', ['id' => $participant->id]) }}
+                                                    </a>
+                                                @else
+                                                    {{ $participant->name ?? __('Player #:id', ['id' => $participant->id]) }}
+                                                @endif
                                             </flux:badge>
                                         @endforeach
                                     </div>

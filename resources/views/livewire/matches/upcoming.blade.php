@@ -14,8 +14,8 @@ new class extends Component {
             ->whereNull('played_at')
             ->where('status', 'scheduled')
             ->with([
-                'homePlayer',
-                'awayPlayer',
+                'homePlayer.user',
+                'awayPlayer.user',
                 'matchday.league',
             ])
             ->join('matchdays', 'matchday_fixtures.matchday_id', '=', 'matchdays.id')
@@ -68,7 +68,21 @@ new class extends Component {
                             <div class="mt-2 space-y-1">
                                 <div class="flex items-center justify-between gap-2">
                                     <span class="truncate text-sm text-neutral-700 dark:text-neutral-300">
-                                        {{ $fixture->homePlayer->name ?? __('Player #:id', ['id' => $fixture->home_player_id]) }} vs {{ $fixture->awayPlayer->name ?? __('Player #:id', ['id' => $fixture->away_player_id]) }}
+                                        @if ($fixture->homePlayer?->user)
+                                            <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $fixture->homePlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $fixture->homePlayer->name ?? __('Player #:id', ['id' => $fixture->home_player_id]) }}
+                                        @endif
+                                        vs
+                                        @if ($fixture->awayPlayer?->user)
+                                            <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $fixture->awayPlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $fixture->awayPlayer->name ?? __('Player #:id', ['id' => $fixture->away_player_id]) }}
+                                        @endif
                                     </span>
                                 </div>                                
                             </div>

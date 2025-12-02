@@ -17,8 +17,8 @@ new class extends Component {
     {
         $this->league = $league->load([
             'participants.player',
-            'matchdays.fixtures.homePlayer',
-            'matchdays.fixtures.awayPlayer',
+            'matchdays.fixtures.homePlayer.user',
+            'matchdays.fixtures.awayPlayer.user',
             'matchdays.fixtures.dartMatch',
         ]);
         
@@ -187,11 +187,23 @@ new class extends Component {
                                 <div wire:key="upcoming-fixture-{{ $fixture->id }}" class="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                                     <div class="flex-1">
                                         <span class="font-medium {{ $fixture->home_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                            {{ $fixture->homePlayer->name }}
+                                            @if ($fixture->homePlayer?->user)
+                                                <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    {{ $fixture->homePlayer->name }}
+                                                </a>
+                                            @else
+                                                {{ $fixture->homePlayer->name }}
+                                            @endif
                                         </span>
                                         <span class="mx-2 text-zinc-500">vs</span>
                                         <span class="font-medium {{ $fixture->away_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                            {{ $fixture->awayPlayer->name }}
+                                            @if ($fixture->awayPlayer?->user)
+                                                <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    {{ $fixture->awayPlayer->name }}
+                                                </a>
+                                            @else
+                                                {{ $fixture->awayPlayer->name }}
+                                            @endif
                                         </span>
                                     </div>
 
@@ -232,11 +244,23 @@ new class extends Component {
                             <div wire:key="fixture-{{ $fixture->id }}" class="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700 {{ ($fixture->home_player_id == $playerId || $fixture->away_player_id == $playerId) ? 'bg-blue-50 dark:bg-blue-950' : '' }}">
                                 <div class="flex-1">
                                     <span class="font-medium {{ $fixture->home_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                        {{ $fixture->homePlayer->name }}
+                                        @if ($fixture->homePlayer?->user)
+                                            <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $fixture->homePlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $fixture->homePlayer->name }}
+                                        @endif
                                     </span>
                                     <span class="mx-2 text-zinc-500">vs</span>
                                     <span class="font-medium {{ $fixture->away_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                        {{ $fixture->awayPlayer->name }}
+                                        @if ($fixture->awayPlayer?->user)
+                                            <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $fixture->awayPlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $fixture->awayPlayer->name }}
+                                        @endif
                                     </span>
                                 </div>
 
@@ -360,11 +384,23 @@ new class extends Component {
                             </div>
                             <div class="mt-1 font-medium">
                                 <span class="{{ $fixture->winner_player_id == $fixture->home_player_id ? 'text-green-600 dark:text-green-400' : '' }}">
-                                    {{ $fixture->homePlayer->name }}
+                                    @if ($fixture->homePlayer?->user)
+                                        <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                            {{ $fixture->homePlayer->name }}
+                                        </a>
+                                    @else
+                                        {{ $fixture->homePlayer->name }}
+                                    @endif
                                 </span>
                                 <span class="mx-2">vs</span>
                                 <span class="{{ $fixture->winner_player_id == $fixture->away_player_id ? 'text-green-600 dark:text-green-400' : '' }}">
-                                    {{ $fixture->awayPlayer->name }}
+                                    @if ($fixture->awayPlayer?->user)
+                                        <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                            {{ $fixture->awayPlayer->name }}
+                                        </a>
+                                    @else
+                                        {{ $fixture->awayPlayer->name }}
+                                    @endif
                                 </span>
                             </div>
                         </div>

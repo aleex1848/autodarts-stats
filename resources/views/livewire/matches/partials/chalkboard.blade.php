@@ -67,7 +67,13 @@
                         @foreach ($players as $player)
                             <div class="text-center">
                                 <div class="text-base font-bold tracking-wide text-slate-200">
-                                    {{ $player->name }}
+                                    @if ($player->user)
+                                        <a href="{{ route('users.show', $player->user) }}" target="_blank" class="text-blue-400 hover:text-blue-300">
+                                            {{ $player->name }}
+                                        </a>
+                                    @else
+                                        {{ $player->name }}
+                                    @endif
                                 </div>
                             </div>
                         @endforeach

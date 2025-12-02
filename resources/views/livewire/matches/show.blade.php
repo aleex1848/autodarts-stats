@@ -47,8 +47,9 @@ new class extends Component
 
         $this->match = $match->load([
             'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+            'players.user',
             'winner',
-            'bullOffs.player',
+            'bullOffs.player.user',
         ]);
 
         $this->legs = $match->legs()
@@ -77,8 +78,9 @@ new class extends Component
         $this->match->refresh();
         $this->match->load([
             'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+            'players.user',
             'winner',
-            'bullOffs.player',
+            'bullOffs.player.user',
         ]);
 
         $this->legs = $this->match->legs()

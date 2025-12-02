@@ -32,10 +32,10 @@ new class extends Component {
     public function mount(League $league): void
     {
         $this->league = $league->load([
-            'registrations.player',
-            'participants.player',
-            'matchdays.fixtures.homePlayer',
-            'matchdays.fixtures.awayPlayer',
+            'registrations.player.user',
+            'participants.player.user',
+            'matchdays.fixtures.homePlayer.user',
+            'matchdays.fixtures.awayPlayer.user',
         ]);
     }
 
@@ -421,7 +421,13 @@ new class extends Component {
                             @foreach ($registrations as $registration)
                                 <tr wire:key="registration-{{ $registration->id }}">
                                     <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                                        {{ $registration->player->name }}
+                                        @if ($registration->player?->user)
+                                            <a href="{{ route('users.show', $registration->player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $registration->player->name }}
+                                            </a>
+                                        @else
+                                            {{ $registration->player->name }}
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
                                         {{ $registration->registered_at->format('d.m.Y H:i') }}
@@ -498,7 +504,13 @@ new class extends Component {
                             @foreach ($participants as $participant)
                                 <tr wire:key="participant-{{ $participant->id }}">
                                     <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                                        {{ $participant->player->name }}
+                                        @if ($participant->player?->user)
+                                            <a href="{{ route('users.show', $participant->player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $participant->player->name }}
+                                            </a>
+                                        @else
+                                            {{ $participant->player->name }}
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-right text-sm">
                                         <flux:button
@@ -550,9 +562,25 @@ new class extends Component {
                             @forelse ($matchday->fixtures as $fixture)
                                 <div wire:key="fixture-{{ $fixture->id }}" class="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                                     <div class="flex-1">
-                                        <span class="font-medium">{{ $fixture->homePlayer->name }}</span>
+                                        <span class="font-medium">
+                                            @if ($fixture->homePlayer?->user)
+                                                <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    {{ $fixture->homePlayer->name }}
+                                                </a>
+                                            @else
+                                                {{ $fixture->homePlayer->name }}
+                                            @endif
+                                        </span>
                                         <span class="mx-2 text-zinc-500">vs</span>
-                                        <span class="font-medium">{{ $fixture->awayPlayer->name }}</span>
+                                        <span class="font-medium">
+                                            @if ($fixture->awayPlayer?->user)
+                                                <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    {{ $fixture->awayPlayer->name }}
+                                                </a>
+                                            @else
+                                                {{ $fixture->awayPlayer->name }}
+                                            @endif
+                                        </span>
                                     </div>
 
                                     <div class="flex items-center gap-4">
@@ -630,7 +658,13 @@ new class extends Component {
                                         {{ $standing->final_position ?? $loop->iteration }}
                                     </td>
                                     <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                                        {{ $standing->player->name }}
+                                        @if ($standing->player?->user)
+                                            <a href="{{ route('users.show', $standing->player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $standing->player->name }}
+                                            </a>
+                                        @else
+                                            {{ $standing->player->name }}
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-right text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                         {{ $standing->points }}

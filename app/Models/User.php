@@ -164,4 +164,42 @@ class User extends Authenticatable
 
         return "https://discord.com/users/{$this->discord_id}";
     }
+
+    /**
+     * Get all finished matches for this user through their player
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, DartMatch>
+     */
+    public function finishedMatches(): \Illuminate\Database\Eloquent\Collection
+    {
+        return $this->matches()->finished()->get();
+    }
+
+    /**
+     * Get all upcoming fixtures for this user through their player
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, MatchdayFixture>
+     */
+    public function upcomingFixtures(): \Illuminate\Database\Eloquent\Collection
+    {
+        if (! $this->player) {
+            return \Illuminate\Database\Eloquent\Collection::empty();
+        }
+
+        return MatchdayFixture::query()
+            ->where(function ($query) {
+                $query->where('home_player_id', $this->player->id)
+                    ->orWhere('away_player_id', $this->player->id);
+            })
+            ->whereNull('dart_match_id')
+            ->whereNull('played_at')
+            ->where('status', 'scheduled')
+            ->with([
+                'homePlayer',
+                'awayPlayer',
+                'matchday.league',
+            ])
+            ->orderBy('matchday_id')
+            ->get();
+    }
 }

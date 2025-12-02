@@ -47,6 +47,7 @@ new class extends Component {
         return DartMatch::query()
             ->with([
                 'players' => fn ($query) => $query->orderBy('match_player.player_index'),
+                'players.user',
                 'winner',
                 'fixture.matchday.league',
             ])
@@ -250,7 +251,13 @@ new class extends Component {
                             <div class="flex flex-wrap gap-2">
                                 @forelse ($match->players as $player)
                                     <flux:badge variant="subtle" size="sm">
-                                        {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                        @if ($player->user)
+                                            <a href="{{ route('users.show', $player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                            </a>
+                                        @else
+                                            {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                        @endif
                                     </flux:badge>
                                 @empty
                                     <span class="text-xs text-zinc-500">{{ __('Keine Spieler erfasst') }}</span>

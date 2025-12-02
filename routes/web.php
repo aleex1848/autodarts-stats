@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\DiscordController;
 use App\Models\DartMatch;
 use App\Models\Download;
 use App\Models\League;
+use App\Models\User;
 use App\Services\MatchExportService;
 use App\Services\MatchImportService;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ Route::get('/auth/discord/callback', [DiscordController::class, 'callback'])->na
 Route::model('match', DartMatch::class);
 Route::model('league', League::class);
 Route::model('download', Download::class);
+Route::model('user', User::class);
 
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
@@ -59,6 +61,9 @@ Route::middleware(['auth', 'verified'])
         Volt::route('leagues/{league}', 'leagues.show')
             ->middleware('can:view,league')
             ->name('leagues.show');
+
+        Volt::route('users/{user}', 'users.show')->name('users.show');
+
         // Export route (only for admins)
         Route::get('matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
             if (! auth()->user()->hasAnyRole(['Super-Admin', 'Admin'])) {

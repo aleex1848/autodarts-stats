@@ -155,7 +155,13 @@
                                     <flux:avatar :src="$player->avatar_url" :name="$player->name" size="sm" />
                                     <div>
                                         <div class="font-medium text-zinc-900 dark:text-zinc-100">
-                                            {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                            @if ($player->user)
+                                                <a href="{{ route('users.show', $player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                                </a>
+                                            @else
+                                                {{ $player->name ?? __('Player #:id', ['id' => $player->id]) }}
+                                            @endif
                                         </div>
                                         <div class="text-xs text-zinc-500 dark:text-zinc-400">
                                             {{ $player->email ?? $player->country ?? __('Keine weiteren Daten') }}
@@ -284,7 +290,13 @@
                 @foreach ($match->bullOffs->sortBy('thrown_at') as $bullOff)
                     <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                            {{ $bullOff->player->name }}
+                            @if ($bullOff->player?->user)
+                                <a href="{{ route('users.show', $bullOff->player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                    {{ $bullOff->player->name }}
+                                </a>
+                            @else
+                                {{ $bullOff->player->name }}
+                            @endif
                         </div>
                         <div class="mt-2 text-2xl font-bold {{ $bullOff->score < 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-zinc-100' }}">
                             {{ abs($bullOff->score) }}
@@ -303,7 +315,7 @@
             @if ($winner)
                 <div class="mt-4 rounded-lg bg-emerald-50 p-4 dark:bg-emerald-900/20">
                     <div class="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-                        {{ __('Gewinner: :name', ['name' => $winner->player->name]) }}
+                        {{ __('Gewinner: :name', ['name' => $winner->player?->user ? '<a href="' . route('users.show', $winner->player->user) . '" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">' . $winner->player->name . '</a>' : $winner->player->name]) }}
                     </div>
                     <div class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
                         {{ __('Beginnt das Spiel') }}
