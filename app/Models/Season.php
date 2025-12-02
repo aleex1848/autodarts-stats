@@ -28,6 +28,8 @@ class Season extends Model
         'status',
         'banner_path',
         'logo_path',
+        'dashboard_display_type',
+        'dashboard_badge_color',
         'parent_season_id',
         'created_by_user_id',
     ];

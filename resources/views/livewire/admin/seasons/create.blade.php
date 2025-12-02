@@ -31,6 +31,8 @@ new class extends Component {
     public string $status = '';
     public $banner = null;
     public $logo = null;
+    public string $dashboard_display_type = 'none';
+    public ?string $dashboard_badge_color = null;
     public array $selectedCoAdmins = [];
     public string $coAdminSearch = '';
 
@@ -111,6 +113,8 @@ new class extends Component {
             'status' => ['required', 'string'],
             'banner' => ['nullable', 'image', 'max:5120', new ImageDimensions(1152, 100)], // 1152x100px Banner
             'logo' => ['nullable', 'image', 'max:5120', new ImageDimensions(null, null, true)], // Quadratisch
+            'dashboard_display_type' => ['required', 'string', 'in:none,banner,logo'],
+            'dashboard_badge_color' => ['nullable', 'required_if:dashboard_display_type,banner', 'string', 'in:zinc,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose'],
             'selectedCoAdmins' => ['nullable', 'array'],
             'selectedCoAdmins.*' => ['exists:users,id'],
         ];
@@ -161,6 +165,8 @@ new class extends Component {
             'status' => $validated['status'],
             'banner_path' => $bannerPath,
             'logo_path' => $logoPath,
+            'dashboard_display_type' => $validated['dashboard_display_type'],
+            'dashboard_badge_color' => $validated['dashboard_badge_color'] ?? null,
             'created_by_user_id' => Auth::id(),
         ]);
 
@@ -390,6 +396,57 @@ new class extends Component {
                         <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
                 </div>
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <flux:heading size="lg" class="mb-4">{{ __('Dashboard "Dein Spieltag" Einstellungen') }}</flux:heading>
+
+            <div class="space-y-4">
+                <flux:select
+                    wire:model.live="dashboard_display_type"
+                    :label="__('Anzeigetyp')"
+                    required
+                >
+                    <option value="none">{{ __('Keine') }}</option>
+                    <option value="banner">{{ __('Banner') }}</option>
+                    <option value="logo">{{ __('Logo') }}</option>
+                </flux:select>
+
+                @if ($dashboard_display_type === 'banner')
+                    <flux:select
+                        wire:model="dashboard_badge_color"
+                        :label="__('Badge-Farbe')"
+                        required
+                    >
+                        <option value="">{{ __('Farbe auswählen...') }}</option>
+                        <option value="zinc">Zinc</option>
+                        <option value="red">Red</option>
+                        <option value="orange">Orange</option>
+                        <option value="amber">Amber</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="lime">Lime</option>
+                        <option value="green">Green</option>
+                        <option value="emerald">Emerald</option>
+                        <option value="teal">Teal</option>
+                        <option value="cyan">Cyan</option>
+                        <option value="sky">Sky</option>
+                        <option value="blue">Blue</option>
+                        <option value="indigo">Indigo</option>
+                        <option value="violet">Violet</option>
+                        <option value="purple">Purple</option>
+                        <option value="fuchsia">Fuchsia</option>
+                        <option value="pink">Pink</option>
+                        <option value="rose">Rose</option>
+                    </flux:select>
+                @endif
+
+                @error('dashboard_display_type')
+                    <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
+                @error('dashboard_badge_color')
+                    <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 

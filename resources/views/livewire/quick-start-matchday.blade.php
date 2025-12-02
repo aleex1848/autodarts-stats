@@ -242,112 +242,170 @@ new class extends Component {
                         $isPlaying = $playingMatchdayId === $matchday->id;
                         $playerId = Auth::user()->player?->id;
                         $fixtureCompleted = $fixture && ($fixture->dart_match_id !== null || $fixture->status === 'completed');
+                        $displayType = $season->dashboard_display_type ?? 'none';
+                        $badgeColor = $season->dashboard_badge_color ?? 'green';
+                        $bannerPath = $displayType === 'banner' ? $season->getBannerPath() : null;
+                        $logoPath = $displayType === 'logo' ? $season->getLogoPath() : null;
                     @endphp
 
                     <div
-                        class="mb-4 rounded-xl border-2 {{ $fixtureCompleted ? 'border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-zinc-800' : 'border-green-200 bg-white dark:border-green-800 dark:bg-zinc-900' }} p-6 shadow-md"
+                        class="mb-4 rounded-xl border-2 {{ $fixtureCompleted ? 'border-neutral-200 dark:border-neutral-700' : 'border-green-200 dark:border-green-800' }} {{ ($bannerPath || $logoPath) ? 'relative overflow-hidden' : '' }} {{ $bannerPath ? 'px-6' : ($fixtureCompleted ? 'bg-neutral-50 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-900') }} {{ $bannerPath ? '' : 'p-6' }} shadow-md"
+                        @if($bannerPath)
+                            style="background-image: url('{{ \Illuminate\Support\Facades\Storage::url($bannerPath) }}'); background-size: 100% auto; background-position: center; background-repeat: no-repeat;"
+                        @endif
                         wire:key="matchday-{{ $matchday->id }}"
                     >
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex-1 min-w-0">
+                        @if($bannerPath)
+                            <div class="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/70 dark:from-black/80 dark:via-black/70 dark:to-black/80 rounded-xl"></div>
+                        @endif
+                        @if($logoPath)
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <img 
+                                    src="{{ \Illuminate\Support\Facades\Storage::url($logoPath) }}" 
+                                    alt="{{ $season->name }} Logo" 
+                                    class="h-full w-auto object-contain"
+                                />
+                            </div>
+                        @endif
+                        <div class="relative flex items-center justify-between gap-4">
+                            <div class="relative flex-1 min-w-0 {{ $bannerPath ? 'bg-black/50 dark:bg-black/60 rounded-lg p-4 backdrop-blur-md' : '' }}">
                                 <div class="flex items-center gap-2 mb-2">
                                     <a href="{{ route('leagues.show', $season->league) }}" wire:navigate>
-                                        <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
-                                            {{ $season->league->slug }}
-                                        </flux:badge>
+                                        @if($bannerPath)
+                                            <flux:badge size="xs" variant="solid" color="{{ $badgeColor }}">
+                                                {{ $season->league->slug }}
+                                            </flux:badge>
+                                        @else
+                                            <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                {{ $season->league->slug }}
+                                            </flux:badge>
+                                        @endif
                                     </a>
                                     <a href="{{ route('seasons.show', $season) }}" wire:navigate>
-                                        <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
-                                            {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
-                                        </flux:badge>
+                                        @if($bannerPath)
+                                            <flux:badge size="xs" variant="solid" color="{{ $badgeColor }}">
+                                                {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
+                                            </flux:badge>
+                                        @else
+                                            <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                                {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
+                                            </flux:badge>
+                                        @endif
                                     </a>
-                                    @if ($isActive)
-                                        <flux:badge size="xs" variant="success">
-                                            {{ __('Aktiv') }}
-                                        </flux:badge>
-                                    @elseif ($matchday->isUpcoming())
-                                        <flux:badge size="xs" variant="primary">
-                                            {{ __('Bevorstehend') }}
-                                        </flux:badge>
+                                </div>
+
+                                <div class="mt-2">
+                                    @if($bannerPath)
+                                        <a href="{{ route('leagues.show', $season->league) }}" wire:navigate>
+                                            <flux:badge size="sm" variant="solid" color="{{ $badgeColor }}">
+                                                {{ $season->name }}
+                                            </flux:badge>
+                                        </a>
+                                    @else
+                                        <a href="{{ route('leagues.show', $season->league) }}" wire:navigate class="block">
+                                            <h4 class="text-lg font-bold text-neutral-900 dark:text-neutral-100 hover:text-green-600 dark:hover:text-green-400 transition-colors">
+                                                {{ $season->name }}
+                                            </h4>
+                                        </a>
                                     @endif
                                 </div>
 
-                                <a href="{{ route('leagues.show', $season->league) }}" wire:navigate class="block">
-                                    <h4 class="text-lg font-bold text-neutral-900 dark:text-neutral-100 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                                        {{ $season->name }}
-                                    </h4>
-                                </a>
-
                                 @if ($fixture)
-                                    <div class="mt-2 flex items-center gap-2 text-sm">
-                                        <span class="font-medium {{ $fixture->home_player_id == $playerId ? 'text-green-600 dark:text-green-400' : 'text-neutral-700 dark:text-neutral-300' }}">
-                                            @if ($fixture->homePlayer?->user)
-                                                <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
+                                    <div class="mt-2">
+                                        @if($bannerPath)
+                                            <flux:badge size="xs" variant="solid" color="{{ $badgeColor }}">
+                                                @if ($fixture->homePlayer?->user)
+                                                    <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="hover:underline">
+                                                        {{ $fixture->homePlayer->name }}
+                                                    </a>
+                                                @else
                                                     {{ $fixture->homePlayer->name }}
-                                                </a>
-                                            @else
-                                                {{ $fixture->homePlayer->name }}
-                                            @endif
-                                        </span>
-                                        <span class="text-neutral-500 dark:text-neutral-400">vs</span>
-                                        <span class="font-medium {{ $fixture->away_player_id == $playerId ? 'text-green-600 dark:text-green-400' : 'text-neutral-700 dark:text-neutral-300' }}">
-                                            @if ($fixture->awayPlayer?->user)
-                                                <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
+                                                @endif
+                                                <span class="mx-1">vs</span>
+                                                @if ($fixture->awayPlayer?->user)
+                                                    <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="hover:underline">
+                                                        {{ $fixture->awayPlayer->name }}
+                                                    </a>
+                                                @else
                                                     {{ $fixture->awayPlayer->name }}
-                                                </a>
-                                            @else
-                                                {{ $fixture->awayPlayer->name }}
-                                            @endif
-                                        </span>
+                                                @endif
+                                            </flux:badge>
+                                        @else
+                                            <div class="flex items-center gap-2 text-sm">
+                                                <span class="font-medium {{ $fixture->home_player_id == $playerId ? 'text-green-600 dark:text-green-400' : 'text-neutral-700 dark:text-neutral-300' }}">
+                                                    @if ($fixture->homePlayer?->user)
+                                                        <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
+                                                            {{ $fixture->homePlayer->name }}
+                                                        </a>
+                                                    @else
+                                                        {{ $fixture->homePlayer->name }}
+                                                    @endif
+                                                </span>
+                                                <span class="text-neutral-500 dark:text-neutral-400">vs</span>
+                                                <span class="font-medium {{ $fixture->away_player_id == $playerId ? 'text-green-600 dark:text-green-400' : 'text-neutral-700 dark:text-neutral-300' }}">
+                                                    @if ($fixture->awayPlayer?->user)
+                                                        <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300">
+                                                            {{ $fixture->awayPlayer->name }}
+                                                        </a>
+                                                    @else
+                                                        {{ $fixture->awayPlayer->name }}
+                                                    @endif
+                                                </span>
+                                            </div>
+                                        @endif
                                     </div>
                                 @endif
 
                                 @if ($matchday->deadline_at)
-                                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                    <p class="mt-1 text-xs {{ $bannerPath ? 'text-white drop-shadow' : 'text-neutral-500 dark:text-neutral-400' }}">
                                         {{ __('Deadline: :date', ['date' => $matchday->deadline_at->format('d.m.Y H:i')]) }}
                                     </p>
                                 @endif
 
                                 @if ($isPlaying)
-                                    <p class="mt-2 text-sm font-medium text-green-600 dark:text-green-400">
+                                    <p class="mt-2 text-sm font-medium {{ $bannerPath ? 'text-green-300 drop-shadow' : 'text-green-600 dark:text-green-400' }}">
                                         {{ __('Warte auf eingehendes Spiel...') }}
                                     </p>
                                 @endif
                             </div>
 
-                            @if (!$fixtureCompleted)
-                                <div class="flex flex-col gap-2">
-                                    @if ($isPlaying)
+                            <div class="relative flex items-center gap-4">
+                                @if (!$fixtureCompleted)
+                                    <div class="flex items-center">
+                                        @if ($isPlaying)
+                                            <flux:button
+                                                variant="danger"
+                                                wire:click="stopMatchday"
+                                                wire:loading.attr="disabled"
+                                            >
+                                                {{ __('Abbrechen') }}
+                                            </flux:button>
+                                        @else
+                                            <flux:button
+                                                variant="primary"
+                                                color="{{ $isActive ? 'green' : 'blue' }}"
+                                                wire:click="startMatchday({{ $matchday->id }})"
+                                                wire:loading.attr="disabled"
+                                                icon="play"
+                                                class="font-semibold"
+                                            >
+                                                {{ $isActive ? __('Jetzt spielen') : __('Spiel starten') }}
+                                            </flux:button>
+                                        @endif
+                                    </div>
+                                @elseif ($fixture->dartMatch)
+                                    <div class="flex items-center">
                                         <flux:button
-                                            variant="danger"
-                                            wire:click="stopMatchday"
-                                            wire:loading.attr="disabled"
+                                            variant="outline"
+                                            :href="route('matches.show', $fixture->dartMatch)"
+                                            wire:navigate
+                                            class="{{ $bannerPath ? 'bg-white/10 border-white/30 text-white hover:bg-white/20' : '' }}"
                                         >
-                                            {{ __('Abbrechen') }}
+                                            {{ __('Match ansehen') }}
                                         </flux:button>
-                                    @else
-                                        <flux:button
-                                            variant="primary"
-                                            color="{{ $isActive ? 'green' : 'blue' }}"
-                                            wire:click="startMatchday({{ $matchday->id }})"
-                                            wire:loading.attr="disabled"
-                                            class="font-semibold"
-                                        >
-                                            {{ $isActive ? __('Jetzt spielen') : __('Spiel starten') }}
-                                        </flux:button>
-                                    @endif
-                                </div>
-                            @elseif ($fixture->dartMatch)
-                                <div class="flex flex-col gap-2">
-                                    <flux:button
-                                        variant="outline"
-                                        :href="route('matches.show', $fixture->dartMatch)"
-                                        wire:navigate
-                                    >
-                                        {{ __('Match ansehen') }}
-                                    </flux:button>
-                                </div>
-                            @endif
+                                    </div>
+                                @endif
+                            </div>
                         </div>
                     </div>
                 @endforeach
