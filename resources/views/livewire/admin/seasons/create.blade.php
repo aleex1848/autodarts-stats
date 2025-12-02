@@ -33,7 +33,7 @@ new class extends Component {
     public $logo = null;
     public string $dashboard_display_type = 'none';
     public ?string $dashboard_badge_color = null;
-    public array $selectedCoAdmins = [];
+    public $selectedCoAdmins = [];
     public string $coAdminSearch = '';
 
     public function mount(?int $league = null): void
@@ -44,6 +44,33 @@ new class extends Component {
         $this->match_format = LeagueMatchFormat::BestOf3->value;
         $this->matchday_schedule_mode = MatchdayScheduleMode::Timed->value;
         $this->status = LeagueStatus::Registration->value;
+        $this->normalizeSelectedCoAdmins();
+    }
+
+    public function hydrate(): void
+    {
+        // Normalisiere nach dem Hydratisieren, falls Livewire einen String zugewiesen hat
+        $this->normalizeSelectedCoAdmins();
+    }
+
+    protected function normalizeSelectedCoAdmins(): void
+    {
+        if (!is_array($this->selectedCoAdmins)) {
+            if (is_null($this->selectedCoAdmins) || $this->selectedCoAdmins === '') {
+                $this->selectedCoAdmins = [];
+            } else {
+                // Konvertiere zu String-Array, da Pillbox Strings sendet
+                $this->selectedCoAdmins = [(string) $this->selectedCoAdmins];
+            }
+        } else {
+            // Filtere leere Werte heraus und konvertiere zu Strings
+            $this->selectedCoAdmins = array_values(
+                array_filter(
+                    array_map('strval', $this->selectedCoAdmins),
+                    fn($v) => $v !== '' && $v !== '0'
+                )
+            );
+        }
     }
 
     public function with(): array
@@ -85,15 +112,8 @@ new class extends Component {
 
     public function updatedSelectedCoAdmins($value): void
     {
-        // Stelle sicher, dass selectedCoAdmins immer ein Array ist
-        if (is_null($value) || $value === '') {
-            $this->selectedCoAdmins = [];
-        } elseif (!is_array($value)) {
-            $this->selectedCoAdmins = [(string) $value];
-        } else {
-            // Filtere leere Werte heraus und konvertiere zu Strings
-            $this->selectedCoAdmins = array_values(array_filter(array_map('strval', $value), fn($v) => $v !== ''));
-        }
+        // Normalisiere den Wert zu einem Array, sobald er aktualisiert wird
+        $this->normalizeSelectedCoAdmins();
     }
 
     protected function rules(): array
@@ -170,10 +190,11 @@ new class extends Component {
             'created_by_user_id' => Auth::id(),
         ]);
 
-        // Sync Co-Admins
-        if (!empty($validated['selectedCoAdmins'])) {
-            $season->coAdmins()->sync($validated['selectedCoAdmins']);
-        }
+        // Sync Co-Admins - konvertiere zu Integer-Array für die Datenbank
+        $coAdmins = !empty($validated['selectedCoAdmins']) 
+            ? array_map('intval', $validated['selectedCoAdmins']) 
+            : [];
+        $season->coAdmins()->sync($coAdmins);
 
         $this->dispatch('notify', title: __('Saison erstellt'));
 
@@ -464,13 +485,14 @@ new class extends Component {
 
                 <flux:pillbox
                     wire:model="selectedCoAdmins"
+                    multiple
                     :label="__('Co-Administratoren')"
                     searchable
                     :placeholder="__('Co-Administratoren auswählen...')"
                     :search:placeholder="__('Benutzer suchen...')"
                 >
                     @foreach ($users as $user)
-                        <flux:pillbox.option value="{{ $user->id }}">
+                        <flux:pillbox.option value="{{ (string) $user->id }}">
                             {{ $user->name }} ({{ $user->email }})
                         </flux:pillbox.option>
                     @endforeach

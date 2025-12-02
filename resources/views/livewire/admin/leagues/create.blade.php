@@ -46,18 +46,25 @@ new class extends Component {
             if (is_null($this->selectedCoAdmins) || $this->selectedCoAdmins === '') {
                 $this->selectedCoAdmins = [];
             } else {
+                // Konvertiere zu String-Array, da Pillbox Strings sendet
                 $this->selectedCoAdmins = [(string) $this->selectedCoAdmins];
             }
         } else {
             // Filtere leere Werte heraus und konvertiere zu Strings
-            $this->selectedCoAdmins = array_values(array_filter(array_map('strval', $this->selectedCoAdmins), fn($v) => $v !== ''));
+            $this->selectedCoAdmins = array_values(
+                array_filter(
+                    array_map('strval', $this->selectedCoAdmins),
+                    fn($v) => $v !== '' && $v !== '0'
+                )
+            );
         }
     }
 
     protected function getSelectedCoAdminsArray(): array
     {
         $this->normalizeSelectedCoAdmins();
-        return is_array($this->selectedCoAdmins) ? $this->selectedCoAdmins : [];
+        // Konvertiere zu Integer-Array für die Datenbank
+        return is_array($this->selectedCoAdmins) ? array_map('intval', $this->selectedCoAdmins) : [];
     }
 
     public function with(): array
@@ -138,7 +145,7 @@ new class extends Component {
 
         // Sync Co-Admins
         $coAdmins = $this->getSelectedCoAdminsArray();
-        $league->coAdmins()->sync(array_map('intval', $coAdmins));
+        $league->coAdmins()->sync($coAdmins);
 
         $this->dispatch('notify', title: __('Liga erstellt'));
 
@@ -257,14 +264,15 @@ new class extends Component {
                 />
 
                 <flux:pillbox
-                    wire:model.live="selectedCoAdmins"
+                    wire:model="selectedCoAdmins"
+                    multiple
                     :label="__('Co-Administratoren')"
                     searchable
                     :placeholder="__('Co-Administratoren auswählen...')"
                     :search:placeholder="__('Benutzer suchen...')"
                 >
                     @foreach ($users as $user)
-                        <flux:pillbox.option value="{{ $user->id }}">
+                        <flux:pillbox.option value="{{ (string) $user->id }}">
                             {{ $user->name }} ({{ $user->email }})
                         </flux:pillbox.option>
                     @endforeach

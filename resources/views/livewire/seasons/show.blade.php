@@ -365,12 +365,6 @@ new class extends Component {
                         </div>
                     @enderror
 
-                    @php
-                        $isActive = $nextMatchday->isCurrentlyActive();
-                        $isPlaying = $playingMatchdayId === $nextMatchday->id;
-                        $fixtureCompleted = $nextMatchdayFixture && ($nextMatchdayFixture->dart_match_id !== null || $nextMatchdayFixture->status === 'completed');
-                    @endphp
-
                     <div class="space-y-4">
                         @if ($nextMatchday)
                             @php

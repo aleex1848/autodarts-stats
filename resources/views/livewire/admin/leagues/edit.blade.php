@@ -21,7 +21,7 @@ new class extends Component {
     public $banner = null;
     public $logo = null;
     public ?string $discord_invite_link = null;
-    public array $selectedCoAdmins = [];
+    public $selectedCoAdmins = [];
     public string $coAdminSearch = '';
 
     public function mount(League $league): void
@@ -31,7 +31,34 @@ new class extends Component {
         $this->slug = $league->slug ?? '';
         $this->description = $league->description ?? '';
         $this->discord_invite_link = $league->discord_invite_link;
-        $this->selectedCoAdmins = $league->coAdmins->pluck('id')->toArray();
+        // Initialisiere als String-Array, da Pillbox Strings sendet
+        $this->selectedCoAdmins = $league->coAdmins->pluck('id')->map(fn($id) => (string) $id)->toArray();
+    }
+
+    public function hydrate(): void
+    {
+        // Normalisiere nach dem Hydratisieren, falls Livewire einen String zugewiesen hat
+        $this->normalizeSelectedCoAdmins();
+    }
+
+    protected function normalizeSelectedCoAdmins(): void
+    {
+        if (!is_array($this->selectedCoAdmins)) {
+            if (is_null($this->selectedCoAdmins) || $this->selectedCoAdmins === '') {
+                $this->selectedCoAdmins = [];
+            } else {
+                // Konvertiere zu String-Array, da Pillbox Strings sendet
+                $this->selectedCoAdmins = [(string) $this->selectedCoAdmins];
+            }
+        } else {
+            // Filtere leere Werte heraus und konvertiere zu Strings
+            $this->selectedCoAdmins = array_values(
+                array_filter(
+                    array_map('strval', $this->selectedCoAdmins),
+                    fn($v) => $v !== '' && $v !== '0'
+                )
+            );
+        }
     }
 
     public function with(): array
@@ -63,15 +90,8 @@ new class extends Component {
 
     public function updatedSelectedCoAdmins($value): void
     {
-        // Stelle sicher, dass selectedCoAdmins immer ein Array ist
-        if (is_null($value) || $value === '') {
-            $this->selectedCoAdmins = [];
-        } elseif (!is_array($value)) {
-            $this->selectedCoAdmins = [(string) $value];
-        } else {
-            // Filtere leere Werte heraus und konvertiere zu Strings
-            $this->selectedCoAdmins = array_values(array_filter(array_map('strval', $value), fn($v) => $v !== ''));
-        }
+        // Normalisiere den Wert zu einem Array, sobald er aktualisiert wird
+        $this->normalizeSelectedCoAdmins();
     }
 
     protected function rules(): array
@@ -124,8 +144,11 @@ new class extends Component {
             'discord_invite_link' => $validated['discord_invite_link'] ?? null,
         ]);
 
-        // Sync Co-Admins
-        $this->league->coAdmins()->sync($validated['selectedCoAdmins'] ?? []);
+        // Sync Co-Admins - konvertiere zu Integer-Array für die Datenbank
+        $coAdmins = !empty($validated['selectedCoAdmins']) 
+            ? array_map('intval', $validated['selectedCoAdmins']) 
+            : [];
+        $this->league->coAdmins()->sync($coAdmins);
 
         $this->dispatch('notify', title: __('Liga aktualisiert'));
 
@@ -299,13 +322,14 @@ new class extends Component {
 
                 <flux:pillbox
                     wire:model="selectedCoAdmins"
+                    multiple
                     :label="__('Co-Administratoren')"
                     searchable
                     :placeholder="__('Co-Administratoren auswählen...')"
                     :search:placeholder="__('Benutzer suchen...')"
                 >
                     @foreach ($users as $user)
-                        <flux:pillbox.option value="{{ $user->id }}">
+                        <flux:pillbox.option value="{{ (string) $user->id }}">
                             {{ $user->name }} ({{ $user->email }})
                         </flux:pillbox.option>
                     @endforeach
