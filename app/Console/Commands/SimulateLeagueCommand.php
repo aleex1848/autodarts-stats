@@ -7,6 +7,7 @@ use App\Enums\LeagueMatchFormat;
 use App\Enums\LeagueMode;
 use App\Enums\LeagueStatus;
 use App\Enums\LeagueVariant;
+use App\Enums\MatchdayScheduleMode;
 use App\Models\DartMatch;
 use App\Models\League;
 use App\Models\Season;
@@ -25,7 +26,11 @@ class SimulateLeagueCommand extends Command
     /**
      * The name and signature of the console command.
      */
-    protected $signature = 'league:simulate {--players=8 : Anzahl der Spieler in der Liga} {--mode=single_round : Liga-Modus (single_round oder double_round)}';
+    protected $signature = 'league:simulate 
+                            {--players=8 : Anzahl der Spieler in der Liga} 
+                            {--mode=single_round : Liga-Modus (single_round oder double_round)}
+                            {--schedule-mode=timed : Spieltag-Planung (timed, unlimited_no_order, unlimited_with_order)}
+                            {--days-per-matchday=7 : Tage pro Spieltag (nur bei timed-Modus)}';
 
     /**
      * The console command description.
@@ -39,6 +44,8 @@ class SimulateLeagueCommand extends Command
     {
         $playerCount = (int) $this->option('players');
         $mode = $this->option('mode');
+        $scheduleMode = $this->option('schedule-mode');
+        $daysPerMatchday = (int) $this->option('days-per-matchday');
 
         if ($playerCount < 2) {
             $this->error('Es werden mindestens 2 Spieler benötigt.');
@@ -52,9 +59,28 @@ class SimulateLeagueCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info("Erstelle Liga mit {$playerCount} Spielern im {$mode}-Modus...");
+        $validScheduleModes = ['timed', 'unlimited_no_order', 'unlimited_with_order'];
+        if (! in_array($scheduleMode, $validScheduleModes)) {
+            $this->error('Ungültiger Schedule-Modus. Verwende: ' . implode(', ', $validScheduleModes));
 
-        return DB::transaction(function () use ($playerCount, $mode) {
+            return self::FAILURE;
+        }
+
+        if ($scheduleMode !== 'timed' && $daysPerMatchday !== 7) {
+            $this->warn('Hinweis: days-per-matchday wird ignoriert, da Schedule-Modus nicht "timed" ist.');
+        }
+
+        $scheduleModeEnum = match ($scheduleMode) {
+            'timed' => MatchdayScheduleMode::Timed,
+            'unlimited_no_order' => MatchdayScheduleMode::UnlimitedNoOrder,
+            'unlimited_with_order' => MatchdayScheduleMode::UnlimitedWithOrder,
+            default => MatchdayScheduleMode::Timed,
+        };
+
+        $this->info("Erstelle Liga mit {$playerCount} Spielern im {$mode}-Modus...");
+        $this->info("Spieltag-Planung: {$scheduleMode}");
+
+        return DB::transaction(function () use ($playerCount, $mode, $scheduleModeEnum, $daysPerMatchday, $scheduleMode) {
             // 1. Benutzer & Spieler erstellen
             $this->info('Erstelle Benutzer und Spieler...');
             $users = User::factory()->count($playerCount)->create();
@@ -85,7 +111,8 @@ class SimulateLeagueCommand extends Command
                 'variant' => LeagueVariant::Single501DoubleOut->value,
                 'match_format' => LeagueMatchFormat::BestOf5->value,
                 'registration_deadline' => now()->subDays(7),
-                'days_per_matchday' => 7,
+                'days_per_matchday' => $scheduleMode === 'timed' ? $daysPerMatchday : null,
+                'matchday_schedule_mode' => $scheduleModeEnum,
                 'status' => LeagueStatus::Active->value,
                 'created_by_user_id' => $users->first()->id,
             ]);
@@ -132,6 +159,10 @@ class SimulateLeagueCommand extends Command
             $this->info("  Saison ID: {$season->id}");
             $this->info("  Spieltage: {$season->matchdays()->count()}");
             $this->info("  Matches: {$totalFixtures}");
+            $this->info("  Spieltag-Planung: {$scheduleMode}");
+            if ($scheduleMode === 'timed') {
+                $this->info("  Tage pro Spieltag: {$daysPerMatchday}");
+            }
 
             return self::SUCCESS;
         });

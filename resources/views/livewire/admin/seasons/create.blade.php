@@ -4,6 +4,7 @@ use App\Enums\LeagueMatchFormat;
 use App\Enums\LeagueMode;
 use App\Enums\LeagueStatus;
 use App\Enums\LeagueVariant;
+use App\Enums\MatchdayScheduleMode;
 use App\Models\League;
 use App\Models\Season;
 use App\Models\User;
@@ -26,6 +27,7 @@ new class extends Component {
     public string $match_format = '';
     public ?string $registration_deadline = null;
     public int $days_per_matchday = 7;
+    public string $matchday_schedule_mode = '';
     public string $status = '';
     public $banner = null;
     public $logo = null;
@@ -38,6 +40,7 @@ new class extends Component {
         $this->mode = LeagueMode::SingleRound->value;
         $this->variant = LeagueVariant::Single501DoubleOut->value;
         $this->match_format = LeagueMatchFormat::BestOf3->value;
+        $this->matchday_schedule_mode = MatchdayScheduleMode::Timed->value;
         $this->status = LeagueStatus::Registration->value;
     }
 
@@ -61,6 +64,7 @@ new class extends Component {
             'variants' => LeagueVariant::cases(),
             'formats' => LeagueMatchFormat::cases(),
             'statuses' => LeagueStatus::cases(),
+            'scheduleModes' => MatchdayScheduleMode::cases(),
             'users' => $users,
         ];
     }
@@ -102,7 +106,8 @@ new class extends Component {
             'variant' => ['required', 'string'],
             'match_format' => ['required', 'string'],
             'registration_deadline' => ['nullable', 'date', 'after:now'],
-            'days_per_matchday' => ['required', 'integer', 'min:1', 'max:30'],
+            'days_per_matchday' => ['required_if:matchday_schedule_mode,timed', 'nullable', 'integer', 'min:1', 'max:30'],
+            'matchday_schedule_mode' => ['required', 'string'],
             'status' => ['required', 'string'],
             'banner' => ['nullable', 'image', 'max:5120', new ImageDimensions(1152, 100)], // 1152x100px Banner
             'logo' => ['nullable', 'image', 'max:5120', new ImageDimensions(null, null, true)], // Quadratisch
@@ -151,7 +156,8 @@ new class extends Component {
             'variant' => $validated['variant'],
             'match_format' => $validated['match_format'],
             'registration_deadline' => $validated['registration_deadline'] ? now()->parse($validated['registration_deadline']) : null,
-            'days_per_matchday' => $validated['days_per_matchday'],
+            'days_per_matchday' => $validated['days_per_matchday'] ?? null,
+            'matchday_schedule_mode' => $validated['matchday_schedule_mode'],
             'status' => $validated['status'],
             'banner_path' => $bannerPath,
             'logo_path' => $logoPath,
@@ -224,14 +230,16 @@ new class extends Component {
                         required
                     />
 
-                    <flux:input
-                        wire:model="days_per_matchday"
-                        :label="__('Tage pro Spieltag')"
-                        type="number"
-                        min="1"
-                        max="30"
-                        required
-                    />
+                    @if ($matchday_schedule_mode === 'timed')
+                        <flux:input
+                            wire:model="days_per_matchday"
+                            :label="__('Tage pro Spieltag')"
+                            type="number"
+                            min="1"
+                            max="30"
+                            required
+                        />
+                    @endif
                 </div>
 
                 <flux:input
@@ -246,6 +254,23 @@ new class extends Component {
             <flux:heading size="lg" class="mb-4">{{ __('Spieleinstellungen') }}</flux:heading>
 
             <div class="space-y-4">
+                <flux:select
+                    wire:model.live="matchday_schedule_mode"
+                    :label="__('Spieltag-Planung')"
+                    required
+                >
+                    @foreach ($scheduleModes as $scheduleMode)
+                        <option value="{{ $scheduleMode->value }}">
+                            {{ match($scheduleMode->value) {
+                                'timed' => __('Zeitlich begrenzt (Ein Spieltag pro X Tage)'),
+                                'unlimited_no_order' => __('Ohne Zeitlimit, ohne Reihenfolge'),
+                                'unlimited_with_order' => __('Ohne Zeitlimit, mit Reihenfolge'),
+                                default => $scheduleMode->name
+                            } }}
+                        </option>
+                    @endforeach
+                </flux:select>
+
                 <flux:select
                     wire:model="mode"
                     :label="__('Modus')"

@@ -69,6 +69,24 @@ new class extends Component {
             return;
         }
 
+        // If order is required, check if all previous matchdays are complete
+        if ($matchday->season->requiresMatchdayOrder()) {
+            $previousMatchdays = $matchday->season->matchdays()
+                ->where('matchday_number', '<', $matchday->matchday_number)
+                ->where('is_return_round', $matchday->is_return_round)
+                ->get();
+
+            $incompleteMatchdays = $previousMatchdays->filter(function ($previousMatchday) {
+                return ! $previousMatchday->isComplete();
+            });
+
+            if ($incompleteMatchdays->isNotEmpty()) {
+                $incompleteNumbers = $incompleteMatchdays->pluck('matchday_number')->join(', ');
+                $this->addError('matchday', "Spieltag {$matchday->matchday_number} kann erst gestartet werden, wenn alle vorherigen Spieltage komplett sind. Noch nicht komplett: {$incompleteNumbers}.");
+                return;
+            }
+        }
+
         // Set playing_matchday_id
         $user->update(['playing_matchday_id' => $matchday->id]);
         $this->playingMatchdayId = $matchday->id;
@@ -114,28 +132,67 @@ new class extends Component {
         $hasUncompletedMatchday = false;
 
         foreach ($seasons as $season) {
-            $nextMatchday = $season->getNextRelevantMatchday($user);
-            if ($nextMatchday) {
-                // Load fixtures for this matchday where user is involved
-                $fixture = \App\Models\MatchdayFixture::where('matchday_id', $nextMatchday->id)
-                    ->where(function ($query) use ($user) {
-                        $query->where('home_player_id', $user->player->id)
-                            ->orWhere('away_player_id', $user->player->id);
-                    })
-                    ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
-                    ->first();
+            // Different logic based on schedule mode
+            if ($season->matchday_schedule_mode === \App\Enums\MatchdayScheduleMode::UnlimitedNoOrder) {
+                // For unlimited no order: show all incomplete matchdays where user has a fixture
+                $matchdays = $season->matchdays()
+                    ->where('is_playoff', false)
+                    ->orderBy('matchday_number')
+                    ->get()
+                    ->filter(function ($matchday) {
+                        return ! $matchday->isComplete();
+                    });
 
-                $fixtureCompleted = $fixture && ($fixture->dart_match_id !== null || $fixture->status === 'completed');
-                
-                if (!$fixtureCompleted) {
-                    $hasUncompletedMatchday = true;
+                foreach ($matchdays as $matchday) {
+                    // Load fixtures for this matchday where user is involved
+                    $fixture = \App\Models\MatchdayFixture::where('matchday_id', $matchday->id)
+                        ->where(function ($query) use ($user) {
+                            $query->where('home_player_id', $user->player->id)
+                                ->orWhere('away_player_id', $user->player->id);
+                        })
+                        ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
+                        ->first();
+
+                    // Only add if user has a fixture in this matchday
+                    if ($fixture) {
+                        $fixtureCompleted = $fixture->dart_match_id !== null || $fixture->status === 'completed';
+                        
+                        if (!$fixtureCompleted) {
+                            $hasUncompletedMatchday = true;
+                        }
+
+                        $relevantMatchdays->push([
+                            'matchday' => $matchday,
+                            'season' => $season,
+                            'fixture' => $fixture,
+                        ]);
+                    }
                 }
+            } else {
+                // For timed and unlimited with order: show next relevant matchday
+                $nextMatchday = $season->getNextRelevantMatchday($user);
+                if ($nextMatchday) {
+                    // Load fixtures for this matchday where user is involved
+                    $fixture = \App\Models\MatchdayFixture::where('matchday_id', $nextMatchday->id)
+                        ->where(function ($query) use ($user) {
+                            $query->where('home_player_id', $user->player->id)
+                                ->orWhere('away_player_id', $user->player->id);
+                        })
+                        ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
+                        ->first();
 
-                $relevantMatchdays->push([
-                    'matchday' => $nextMatchday,
-                    'season' => $season,
-                    'fixture' => $fixture,
-                ]);
+                    $fixtureCompleted = $fixture && ($fixture->dart_match_id !== null || $fixture->status === 'completed');
+                    
+                    if (!$fixtureCompleted) {
+                        $hasUncompletedMatchday = true;
+                    }
+
+                    $relevantMatchdays->push([
+                        'matchday' => $nextMatchday,
+                        'season' => $season,
+                        'fixture' => $fixture,
+                    ]);
+                }
             }
         }
 

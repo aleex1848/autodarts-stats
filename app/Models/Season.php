@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MatchdayScheduleMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,7 @@ class Season extends Model
         'match_format',
         'registration_deadline',
         'days_per_matchday',
+        'matchday_schedule_mode',
         'status',
         'banner_path',
         'logo_path',
@@ -36,6 +38,7 @@ class Season extends Model
             'registration_deadline' => 'datetime',
             'max_players' => 'integer',
             'days_per_matchday' => 'integer',
+            'matchday_schedule_mode' => MatchdayScheduleMode::class,
         ];
     }
 
@@ -119,6 +122,22 @@ class Season extends Model
     }
 
     /**
+     * Check if this season uses timed schedule mode.
+     */
+    public function isTimedSchedule(): bool
+    {
+        return $this->matchday_schedule_mode === MatchdayScheduleMode::Timed;
+    }
+
+    /**
+     * Check if this season requires matchdays to be completed in order.
+     */
+    public function requiresMatchdayOrder(): bool
+    {
+        return $this->matchday_schedule_mode === MatchdayScheduleMode::UnlimitedWithOrder;
+    }
+
+    /**
      * Get the next relevant matchday for a user.
      * Only for non-completed seasons, returns the first matchday that is upcoming or currently active.
      * User must be a participant of the season.
@@ -151,6 +170,23 @@ class Season extends Model
 
         // Find the first matchday that is upcoming or currently active
         foreach ($matchdays as $matchday) {
+            // If order is required, check if previous matchdays are complete
+            if ($this->requiresMatchdayOrder()) {
+                // Check if all previous matchdays are complete
+                $previousMatchdays = $this->matchdays()
+                    ->where('matchday_number', '<', $matchday->matchday_number)
+                    ->where('is_return_round', $matchday->is_return_round)
+                    ->get();
+
+                $allPreviousComplete = $previousMatchdays->every(function ($previousMatchday) {
+                    return $previousMatchday->isComplete();
+                });
+
+                if (! $allPreviousComplete) {
+                    continue;
+                }
+            }
+
             if ($matchday->isCurrentlyActive() || $matchday->isUpcoming()) {
                 return $matchday;
             }

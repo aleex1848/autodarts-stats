@@ -122,12 +122,20 @@ class LeagueScheduler
 
     protected function calculateDeadline(Season $season, int $matchdayNumber): ?\DateTime
     {
+        // For unlimited schedule modes, return null (no deadline)
+        if (! $season->isTimedSchedule()) {
+            return null;
+        }
+
         if (! $season->days_per_matchday) {
             return null;
         }
 
         $startDate = $season->registration_deadline ?? now();
 
-        return (clone $startDate)->modify("+{$matchdayNumber} weeks");
+        // Calculate deadline: start date + (matchday number * days per matchday)
+        $daysToAdd = $matchdayNumber * $season->days_per_matchday;
+
+        return (clone $startDate)->modify("+{$daysToAdd} days");
     }
 }

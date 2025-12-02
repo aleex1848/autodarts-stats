@@ -35,6 +35,7 @@ class SplitSeason
                     'match_format' => $season->match_format,
                     'registration_deadline' => $season->registration_deadline,
                     'days_per_matchday' => $season->days_per_matchday,
+                    'matchday_schedule_mode' => $season->matchday_schedule_mode,
                     'status' => LeagueStatus::Active->value,
                     'parent_season_id' => $season->id,
                     'created_by_user_id' => $season->created_by_user_id,

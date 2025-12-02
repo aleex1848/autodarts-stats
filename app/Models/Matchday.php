@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FixtureStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,12 +41,36 @@ class Matchday extends Model
     }
 
     /**
+     * Check if all fixtures of this matchday are completed.
+     */
+    public function isComplete(): bool
+    {
+        $totalFixtures = $this->fixtures()->count();
+        
+        if ($totalFixtures === 0) {
+            return false;
+        }
+
+        $completedFixtures = $this->fixtures()
+            ->where('status', FixtureStatus::Completed->value)
+            ->count();
+
+        return $completedFixtures === $totalFixtures;
+    }
+
+    /**
      * Get the start date of this matchday.
      * First matchday: deadline - days_per_matchday
      * Other matchdays: previous matchday's deadline
+     * Returns null for unlimited schedule modes.
      */
     public function getStartDate(): ?\Carbon\Carbon
     {
+        // For unlimited schedule modes, return null
+        if (! $this->season->isTimedSchedule()) {
+            return null;
+        }
+
         if (! $this->deadline_at) {
             return null;
         }
@@ -75,9 +100,15 @@ class Matchday extends Model
     /**
      * Check if this matchday is currently active.
      * A matchday is active if current time is between start date and deadline.
+     * For unlimited schedule modes, a matchday is active if it's not complete.
      */
     public function isCurrentlyActive(): bool
     {
+        // For unlimited schedule modes, matchday is active if not complete
+        if (! $this->season->isTimedSchedule()) {
+            return ! $this->isComplete();
+        }
+
         if (! $this->deadline_at) {
             return false;
         }
@@ -95,9 +126,15 @@ class Matchday extends Model
     /**
      * Check if this matchday is upcoming (in the future).
      * A matchday is upcoming if the start date is in the future.
+     * For unlimited schedule modes, matchdays are never "upcoming" - they're either active or complete.
      */
     public function isUpcoming(): bool
     {
+        // For unlimited schedule modes, matchdays are never "upcoming"
+        if (! $this->season->isTimedSchedule()) {
+            return false;
+        }
+
         $startDate = $this->getStartDate();
         if (! $startDate) {
             return false;
