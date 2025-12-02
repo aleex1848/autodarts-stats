@@ -12,6 +12,7 @@ new class extends Component {
     public string $email = '';
     public string $password = '';
     public string $discordUsername = '';
+    public string $discordId = '';
     public array $selectedRoles = [];
     public ?int $selectedPlayerId = null;
     public string $playerSearch = '';
@@ -60,6 +61,7 @@ new class extends Component {
             ],
             'password' => [$this->editingUserId ? 'nullable' : 'required', 'string', 'min:8'],
             'discordUsername' => ['nullable', 'string', 'max:255'],
+            'discordId' => ['nullable', 'string', 'max:255'],
             'selectedRoles' => ['required', 'array', 'min:1'],
             'selectedRoles.*' => ['string', Rule::exists(config('permission.table_names.roles'), 'name')],
             'selectedPlayerId' => [
@@ -85,6 +87,7 @@ new class extends Component {
         $this->email = $user->email;
         $this->password = '';
         $this->discordUsername = $user->discord_username ?? '';
+        $this->discordId = $user->discord_id ?? '';
         $this->selectedRoles = $user->roles->pluck('name')->toArray();
         $this->selectedPlayerId = $user->player?->id;
         $this->playerSearch = '';
@@ -101,6 +104,12 @@ new class extends Component {
         if (isset($validated['discordUsername'])) {
             $validated['discord_username'] = $validated['discordUsername'] ?: null;
             unset($validated['discordUsername']);
+        }
+
+        // Map discordId to discord_id for database
+        if (isset($validated['discordId'])) {
+            $validated['discord_id'] = $validated['discordId'] ?: null;
+            unset($validated['discordId']);
         }
 
         if ($this->editingUserId) {
@@ -200,7 +209,7 @@ new class extends Component {
 
     protected function resetForm(): void
     {
-        $this->reset('editingUserId', 'name', 'email', 'password', 'discordUsername', 'selectedRoles', 'selectedPlayerId', 'playerSearch');
+        $this->reset('editingUserId', 'name', 'email', 'password', 'discordUsername', 'discordId', 'selectedRoles', 'selectedPlayerId', 'playerSearch');
     }
 }; ?>
 
@@ -303,7 +312,8 @@ new class extends Component {
         <form wire:submit="saveUser" class="space-y-4">
             <flux:input wire:model="name" :label="__('Name')" type="text" required />
             <flux:input wire:model="email" :label="__('E-Mail')" type="email" required />
-            <flux:input wire:model="discordUsername" :label="__('Discord Username')" type="text" autocomplete="username" />
+            <flux:input wire:model="discordUsername" :label="__('Discord Username (optional)')" type="text" autocomplete="username" />
+            <flux:input wire:model="discordId" :label="__('Discord User ID (optional)')" type="text" autocomplete="off" />
             <flux:input
                 wire:model="password"
                 :label="$editingUserId ? __('Neues Passwort (optional)') : __('Passwort')"
