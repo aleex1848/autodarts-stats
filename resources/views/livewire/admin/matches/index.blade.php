@@ -18,6 +18,9 @@ new class extends Component {
     public $importFile = null;
     public bool $importOverwrite = false;
     public bool $showImportModal = false;
+    public bool $showDeleteModal = false;
+    public ?int $matchIdBeingDeleted = null;
+    public ?string $matchIdBeingDeletedString = null;
 
     protected $queryString = [
         'search' => ['except' => ''],
@@ -50,6 +53,7 @@ new class extends Component {
                 'players.user',
                 'winner',
                 'fixture.matchday.season.league',
+                'fixture',
             ])
             ->when($this->statusFilter === 'finished', fn ($query) => $query->whereNotNull('finished_at'))
             ->when($this->statusFilter === 'ongoing', fn ($query) => $query->whereNull('finished_at'))
@@ -107,6 +111,48 @@ new class extends Component {
         } catch (\Exception $e) {
             Session::flash('error', __('Fehler beim Importieren: :message', ['message' => $e->getMessage()]));
             $this->closeImportModal();
+        }
+    }
+
+    public function confirmDelete(int $matchId): void
+    {
+        $match = DartMatch::findOrFail($matchId);
+        $this->matchIdBeingDeleted = $match->id;
+        $this->matchIdBeingDeletedString = $match->autodarts_match_id;
+        $this->showDeleteModal = true;
+    }
+
+    public function deleteMatch(): void
+    {
+        if (! $this->matchIdBeingDeleted) {
+            $this->showDeleteModal = false;
+            return;
+        }
+
+        $match = DartMatch::with('fixture')->findOrFail($this->matchIdBeingDeleted);
+
+        // Reset fixture if match was assigned to one
+        if ($match->fixture) {
+            $match->fixture->update([
+                'dart_match_id' => null,
+                'status' => 'scheduled',
+                'played_at' => null,
+            ]);
+        }
+
+        // Delete the match
+        $match->delete();
+
+        Session::flash('success', __('Match wurde erfolgreich gelöscht.'));
+        $this->showDeleteModal = false;
+        $this->matchIdBeingDeleted = null;
+        $this->matchIdBeingDeletedString = null;
+    }
+
+    public function updatedShowDeleteModal(bool $isOpen): void
+    {
+        if (! $isOpen) {
+            $this->reset('matchIdBeingDeleted', 'matchIdBeingDeletedString');
         }
     }
 }; ?>
@@ -283,15 +329,25 @@ new class extends Component {
                             </div>
                         </td>
                         <td class="px-4 py-3 text-right text-sm">
-                            <flux:button
-                                size="sm"
-                                variant="outline"
-                                :href="route('admin.matches.show', $match)"
-                                wire:navigate
-                                icon="arrow-top-right-on-square"
-                            >
-                                {{ __('Details') }}
-                            </flux:button>
+                            <div class="flex justify-end gap-2">
+                                <flux:button
+                                    size="sm"
+                                    variant="outline"
+                                    :href="route('admin.matches.show', $match)"
+                                    wire:navigate
+                                    icon="arrow-top-right-on-square"
+                                >
+                                    {{ __('Details') }}
+                                </flux:button>
+                                <flux:button
+                                    size="sm"
+                                    variant="danger"
+                                    wire:click="confirmDelete({{ $match->id }})"
+                                    icon="trash"
+                                >
+                                    {{ __('Löschen') }}
+                                </flux:button>
+                            </div>
                         </td>
                     </tr>
                 @empty
@@ -308,6 +364,35 @@ new class extends Component {
     <div>
         {{ $matches->links(data: ['scrollTo' => false]) }}
     </div>
+
+    <flux:modal wire:model="showDeleteModal" class="space-y-6">
+        <div>
+            <flux:heading size="lg">{{ __('Match löschen') }}</flux:heading>
+            <flux:subheading>
+                {{ __('Soll das Match ":id" wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.', ['id' => $matchIdBeingDeletedString]) }}
+            </flux:subheading>
+            <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                {{ __('Wenn dieses Match einem Spieltag zugeordnet war, wird die Zuordnung entfernt und das Spieltags-Spiel wieder auf "geplant" gesetzt.') }}
+            </p>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <flux:button
+                variant="ghost"
+                wire:click="$set('showDeleteModal', false)"
+            >
+                {{ __('Abbrechen') }}
+            </flux:button>
+            <flux:button
+                variant="danger"
+                wire:click="deleteMatch"
+                wire:loading.attr="disabled"
+            >
+                <span wire:loading.remove>{{ __('Löschen') }}</span>
+                <span wire:loading>{{ __('Lösche...') }}</span>
+            </flux:button>
+        </div>
+    </flux:modal>
 </section>
 
 

@@ -2,7 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Models\League;
+use App\Models\Season;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +18,7 @@ class MatchdayFactory extends Factory
     public function definition(): array
     {
         return [
-            'league_id' => League::factory(),
+            'season_id' => Season::factory(),
             'matchday_number' => 1,
             'is_return_round' => false,
             'deadline_at' => fake()->optional()->dateTimeBetween('now', '+30 days'),

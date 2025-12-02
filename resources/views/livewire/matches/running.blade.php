@@ -48,76 +48,82 @@ new class extends Component {
 
         <div class="flex-1 overflow-y-auto p-6">
             @forelse ($matches as $match)
-                <a
-                    href="{{ route('matches.show', $match) }}"
-                    wire:navigate
-                    class="group mb-4 block rounded-lg border border-neutral-200 bg-neutral-50 p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-zinc-800 dark:hover:border-neutral-600 dark:hover:bg-zinc-700"
+                <div
+                    class="group mb-4 rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-zinc-800"
                     wire:key="running-match-{{ $match->id }}"
                 >
-                    <div class="flex items-start justify-between gap-4">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-2 min-w-0">
+                    @if ($match->fixture?->matchday)
+                        <div class="flex items-center gap-1 px-4 pt-4 pb-2">
+                            <a href="{{ route('leagues.show', $match->fixture->matchday->season->league) }}" wire:navigate class="relative z-10">
+                                <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                    {{ $match->fixture->matchday->season->league->slug }}
+                                </flux:badge>
+                            </a>
+                            <a href="{{ route('seasons.show', $match->fixture->matchday->season) }}" wire:navigate class="relative z-10">
+                                <flux:badge size="xs" variant="subtle" class="hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer">
+                                    {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
+                                </flux:badge>
+                            </a>
+                        </div>
+                    @endif
+                    <a
+                        href="{{ route('matches.show', $match) }}"
+                        wire:navigate
+                        class="block p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-zinc-700 {{ $match->fixture?->matchday ? 'pt-2' : '' }}"
+                    >
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
                                     <h4 class="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-700 dark:text-neutral-100 dark:group-hover:text-neutral-300">
                                         {{ $match->variant }} · {{ $match->type }}
                                     </h4>
-                                    @if ($match->fixture?->matchday)
-                                        <div class="flex items-center gap-1 shrink-0">
-                                            <flux:badge size="xs" variant="subtle">
-                                                {{ $match->fixture->matchday->season->league->slug }}
-                                            </flux:badge>
-                                            <flux:badge size="xs" variant="subtle">
-                                                {{ __('Spieltag :number', ['number' => $match->fixture->matchday->matchday_number]) }}
-                                            </flux:badge>
-                                        </div>
+                                    @php
+                                        $totalDarts = $match->players->sum('pivot.darts_thrown');
+                                    @endphp
+                                    @if ($totalDarts > 0)
+                                        <span class="shrink-0 inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400" title="{{ __('Geworfene Pfeile') }}">
+                                            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M3 3v6m0-6h6M21 21v-6m0 6h-6" />
+                                            </svg>
+                                            {{ $totalDarts }}
+                                        </span>
                                     @endif
                                 </div>
-                                @php
-                                    $totalDarts = $match->players->sum('pivot.darts_thrown');
-                                @endphp
-                                @if ($totalDarts > 0)
-                                    <span class="shrink-0 inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400" title="{{ __('Geworfene Pfeile') }}">
-                                        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M3 3v6m0-6h6M21 21v-6m0 6h-6" />
-                                        </svg>
-                                        {{ $totalDarts }}
-                                    </span>
-                                @endif
-                            </div>
 
-                            {{-- Spieler mit Ergebnis --}}
-                            <div class="mt-2 space-y-1">
-                                @foreach ($match->players as $participant)
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="truncate text-sm text-neutral-700 dark:text-neutral-300">
-                                            {{ $participant->name ?? __('Player #:id', ['id' => $participant->id]) }}
-                                        </span>
-                                        <span class="shrink-0 min-w-[3rem] text-right font-mono text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                                            @if ($match->type === 'Sets')
-                                                {{ $participant->pivot->sets_won ?? 0 }}:{{ $participant->pivot->legs_won ?? 0 }}
-                                            @else
-                                                {{ $participant->pivot->legs_won ?? 0 }}
-                                            @endif
-                                        </span>
-                                    </div>
-                                @endforeach
-                            </div>
+                                {{-- Spieler mit Ergebnis --}}
+                                <div class="mt-2 space-y-1">
+                                    @foreach ($match->players as $participant)
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="truncate text-sm text-neutral-700 dark:text-neutral-300">
+                                                {{ $participant->name ?? __('Player #:id', ['id' => $participant->id]) }}
+                                            </span>
+                                            <span class="shrink-0 min-w-[3rem] text-right font-mono text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                                                @if ($match->type === 'Sets')
+                                                    {{ $participant->pivot->sets_won ?? 0 }}:{{ $participant->pivot->legs_won ?? 0 }}
+                                                @else
+                                                    {{ $participant->pivot->legs_won ?? 0 }}
+                                                @endif
+                                            </span>
+                                        </div>
+                                    @endforeach
+                                </div>
 
-                            <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                                @if ($match->started_at)
-                                    {{ $match->started_at->diffForHumans() }}
-                                @else
-                                    {{ __('Startzeit unbekannt') }}
-                                @endif
-                            </p>
+                                <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                    @if ($match->started_at)
+                                        {{ $match->started_at->diffForHumans() }}
+                                    @else
+                                        {{ __('Startzeit unbekannt') }}
+                                    @endif
+                                </p>
+                            </div>
+                            <div class="shrink-0 self-center">
+                                <svg class="size-5 text-neutral-400 transition-colors group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                                </svg>
+                            </div>
                         </div>
-                        <div class="shrink-0 self-center">
-                            <svg class="size-5 text-neutral-400 transition-colors group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                            </svg>
-                        </div>
-                    </div>
-                </a>
+                    </a>
+                </div>
             @empty
                 <div class="py-8 text-center">
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ __('Aktuell werden keine Matches aufgezeichnet.') }}</p>

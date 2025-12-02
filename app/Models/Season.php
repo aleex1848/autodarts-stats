@@ -117,4 +117,45 @@ class Season extends Model
     {
         return $this->attributes['logo_path'] !== null;
     }
+
+    /**
+     * Get the next relevant matchday for a user.
+     * Only for non-completed seasons, returns the first matchday that is upcoming or currently active.
+     * User must be a participant of the season.
+     */
+    public function getNextRelevantMatchday(User $user): ?Matchday
+    {
+        // Only for non-completed seasons
+        if ($this->status === 'completed' || $this->status === 'cancelled') {
+            return null;
+        }
+
+        // Check if user is a participant
+        if (! $user->player) {
+            return null;
+        }
+
+        $isParticipant = $this->participants()
+            ->where('player_id', $user->player->id)
+            ->exists();
+
+        if (! $isParticipant) {
+            return null;
+        }
+
+        // Get all matchdays ordered by matchday_number
+        $matchdays = $this->matchdays()
+            ->orderBy('matchday_number')
+            ->orderBy('is_return_round')
+            ->get();
+
+        // Find the first matchday that is upcoming or currently active
+        foreach ($matchdays as $matchday) {
+            if ($matchday->isCurrentlyActive() || $matchday->isUpcoming()) {
+                return $matchday;
+            }
+        }
+
+        return null;
+    }
 }

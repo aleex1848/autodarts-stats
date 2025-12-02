@@ -2,12 +2,14 @@
 
 namespace App\Support;
 
+use App\Events\MatchdayGameStarted;
 use App\Events\MatchUpdated;
 use App\Events\PlayerIdentified;
 use App\Models\BullOff;
 use App\Models\DartMatch;
 use App\Models\DartThrow;
 use App\Models\Leg;
+use App\Models\MatchdayFixture;
 use App\Models\Player;
 use App\Models\Turn;
 use App\Models\User;
@@ -379,7 +381,12 @@ class WebhookProcessing extends ProcessWebhookJob
         });
 
         // Check for player identification (outside transaction to ensure broadcasts work correctly)
-        $this->handlePlayerIdentification($match, $matchData);
+        if ($match) {
+            $this->handlePlayerIdentification($match, $matchData);
+
+            // Check for matchday assignment (outside transaction to ensure broadcasts work correctly)
+            $this->handleMatchdayAssignment($match, $matchData);
+        }
 
         Log::debug('match_state processed', [
             'matchId' => $payload['matchId'],
@@ -496,6 +503,145 @@ class WebhookProcessing extends ProcessWebhookJob
             'user_id' => $user->id,
             'player_id' => $nonBotPlayer->id,
             'player_name' => $nonBotPlayer->name,
+        ]);
+    }
+
+    /**
+     * Handle matchday assignment when a user is playing a matchday game.
+     * Links the incoming match to the appropriate fixture and resets the playing_matchday_id.
+     */
+    protected function handleMatchdayAssignment(DartMatch $match, array $matchData): void
+    {
+        // Try to identify the user from the webhook request
+        $user = $this->getUserFromWebhook();
+
+        // If we can't identify the user from the webhook, fall back to finding users in playing mode
+        if (! $user) {
+            $playingUsers = User::whereNotNull('playing_matchday_id')->get();
+
+            if ($playingUsers->isEmpty()) {
+                return;
+            }
+
+            // Try to match by player name in the match
+            $user = null;
+            foreach ($playingUsers as $playingUser) {
+                if (! $playingUser->player) {
+                    continue;
+                }
+
+                // Check if any player in the match matches the user's player
+                foreach ($matchData['players'] as $playerData) {
+                    $playerName = preg_replace('/\s+/', ' ', trim($playerData['name'] ?? ''));
+                    $userId = $playerData['userId'] ?? null;
+
+                    // Skip bots
+                    if (str_starts_with($playerName, 'Bot Level') || ! $userId) {
+                        continue;
+                    }
+
+                    if (str_starts_with($userId, '00000000-0000-0000')) {
+                        continue;
+                    }
+
+                    // Check if this player matches the user's player
+                    if ($playingUser->player->autodarts_user_id === $userId) {
+                        $user = $playingUser;
+                        break 2;
+                    }
+
+                    // Also check by name (case-insensitive)
+                    if (strcasecmp($playerName, $playingUser->player->name) === 0) {
+                        $user = $playingUser;
+                        break 2;
+                    }
+                }
+            }
+
+            if (! $user) {
+                return;
+            }
+        } else {
+            // Check if this user is in playing mode
+            if (! $user->playing_matchday_id) {
+                return;
+            }
+        }
+
+        // Get the matchday
+        $matchday = $user->playingMatchday;
+        if (! $matchday) {
+            Log::warning('User has playing_matchday_id but matchday not found', [
+                'user_id' => $user->id,
+                'playing_matchday_id' => $user->playing_matchday_id,
+            ]);
+            $user->update(['playing_matchday_id' => null]);
+
+            return;
+        }
+
+        // Find the user's player
+        if (! $user->player) {
+            Log::warning('User in playing mode but has no player', [
+                'user_id' => $user->id,
+            ]);
+            $user->update(['playing_matchday_id' => null]);
+
+            return;
+        }
+
+        // Find the fixture for this matchday that involves the user's player
+        $fixture = MatchdayFixture::where('matchday_id', $matchday->id)
+            ->where(function ($query) use ($user) {
+                $query->where('home_player_id', $user->player->id)
+                    ->orWhere('away_player_id', $user->player->id);
+            })
+            ->whereNull('dart_match_id')
+            ->where('status', 'scheduled')
+            ->first();
+
+        if (! $fixture) {
+            Log::info('No matching fixture found for matchday assignment', [
+                'user_id' => $user->id,
+                'matchday_id' => $matchday->id,
+                'player_id' => $user->player->id,
+            ]);
+            $user->update(['playing_matchday_id' => null]);
+            broadcast(new MatchdayGameStarted(
+                $user,
+                $matchday,
+                $match,
+                false,
+                'Kein passendes Spiel für diesen Spieltag gefunden.'
+            ));
+
+            return;
+        }
+
+        // Link the match to the fixture
+        $fixture->update([
+            'dart_match_id' => $match->id,
+            'status' => 'completed',
+            'played_at' => $match->started_at ?? now(),
+        ]);
+
+        // Reset playing_matchday_id
+        $user->update(['playing_matchday_id' => null]);
+
+        // Broadcast success event
+        broadcast(new MatchdayGameStarted(
+            $user,
+            $matchday,
+            $match,
+            true,
+            "Spiel wurde erfolgreich Spieltag {$matchday->matchday_number} zugeordnet."
+        ));
+
+        Log::info('Matchday game assigned', [
+            'user_id' => $user->id,
+            'matchday_id' => $matchday->id,
+            'fixture_id' => $fixture->id,
+            'match_id' => $match->id,
         ]);
     }
 
@@ -1757,7 +1903,7 @@ class WebhookProcessing extends ProcessWebhookJob
     protected function isBullOffEnabledForMatch(DartMatch $match): bool
     {
         // Find a match_state webhook for this match
-        $webhookCall = WebhookCall::whereRaw(
+        $webhookCall = \Spatie\WebhookClient\Models\WebhookCall::whereRaw(
             "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.matchId')) = ?",
             [$match->autodarts_match_id]
         )

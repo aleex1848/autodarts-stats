@@ -17,6 +17,13 @@
             </div>
         @endif
 
+        {{-- Dein Spieltag - Prominent zentral positioniert --}}
+        <div class="flex justify-center px-4 md:px-8 lg:px-16">
+            <div class="w-full max-w-4xl">
+                <livewire:quick-start-matchday />
+            </div>
+        </div>
+
         {{-- Obere 3er Grid: Latest, Running, Upcoming --}}
         <div class="grid auto-rows-min gap-4 md:grid-cols-3">
             <livewire:matches.latest />

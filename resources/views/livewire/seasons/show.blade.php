@@ -13,6 +13,9 @@ new class extends Component {
 
     public string $activeTab = 'overview';
     public ?int $playerId = null;
+    public ?int $playingMatchdayId = null;
+    public ?string $message = null;
+    public bool $success = false;
 
     public function mount(Season $season): void
     {
@@ -25,10 +28,104 @@ new class extends Component {
         ]);
         
         $this->playerId = Auth::user()?->player?->id;
+        $this->refreshStatus();
+    }
+
+    public function getListeners(): array
+    {
+        return [
+            "echo-private:user." . Auth::id() . ",.matchday.game.started" => 'handleMatchdayGameStarted',
+        ];
+    }
+
+    public function refreshStatus(): void
+    {
+        $user = Auth::user();
+        $this->playingMatchdayId = $user->playing_matchday_id ?? null;
+    }
+
+    public function handleMatchdayGameStarted(array $data): void
+    {
+        $this->playingMatchdayId = $data['playing_matchday_id'] ?? null;
+        $this->success = $data['success'] ?? false;
+        $this->message = $data['message'] ?? null;
+
+        Auth::user()->refresh();
+        $this->refreshStatus();
+    }
+
+    public function startMatchday(int $matchdayId): void
+    {
+        $user = Auth::user();
+        $matchday = \App\Models\Matchday::find($matchdayId);
+
+        if (! $matchday) {
+            $this->addError('matchday', 'Spieltag nicht gefunden.');
+            return;
+        }
+
+        // Validate user is participant of the season
+        if (! $user->player) {
+            $this->addError('matchday', 'Du musst zuerst einen Spieler mit deinem Account verknüpfen.');
+            return;
+        }
+
+        $isParticipant = $this->season->participants()
+            ->where('player_id', $user->player->id)
+            ->exists();
+
+        if (! $isParticipant) {
+            $this->addError('matchday', 'Du bist kein Teilnehmer dieser Saison.');
+            return;
+        }
+
+        // Validate matchday belongs to this season
+        if ($matchday->season_id !== $this->season->id) {
+            $this->addError('matchday', 'Dieser Spieltag gehört nicht zu dieser Saison.');
+            return;
+        }
+
+        // Validate matchday is relevant (not past)
+        if (! $matchday->isCurrentlyActive() && ! $matchday->isUpcoming()) {
+            $this->addError('matchday', 'Dieser Spieltag ist bereits vorbei.');
+            return;
+        }
+
+        // Set playing_matchday_id
+        $user->update(['playing_matchday_id' => $matchday->id]);
+        $this->playingMatchdayId = $matchday->id;
+        $this->message = "Spieltag {$matchday->matchday_number} gestartet. Das nächste eingehende Spiel wird diesem Spieltag zugeordnet.";
+        $this->success = true;
+        
+        // Clear any previous errors
+        $this->resetErrorBag();
+    }
+
+    public function stopMatchday(): void
+    {
+        $user = Auth::user();
+        $user->update(['playing_matchday_id' => null]);
+        $this->playingMatchdayId = null;
+        $this->message = 'Spieltag-Modus beendet.';
+        $this->success = true;
     }
 
     public function with(): array
     {
+        $user = Auth::user();
+        $nextMatchday = $user ? $this->season->getNextRelevantMatchday($user) : null;
+        $nextMatchdayFixture = null;
+
+        if ($nextMatchday && $this->playerId) {
+            $nextMatchdayFixture = \App\Models\MatchdayFixture::where('matchday_id', $nextMatchday->id)
+                ->where(function ($query) {
+                    $query->where('home_player_id', $this->playerId)
+                        ->orWhere('away_player_id', $this->playerId);
+                })
+                ->with(['homePlayer.user', 'awayPlayer.user', 'dartMatch'])
+                ->first();
+        }
+
         return [
             'matchdays' => $this->season->matchdays()->orderBy('matchday_number')->get(),
             'standings' => app(LeagueStandingsCalculator::class)->calculateStandings($this->season),
@@ -45,6 +142,8 @@ new class extends Component {
                     ->pluck('fixtures')
                     ->flatten()
                 : collect(),
+            'nextMatchday' => $nextMatchday,
+            'nextMatchdayFixture' => $nextMatchdayFixture,
         ];
     }
 }; ?>
@@ -67,36 +166,36 @@ new class extends Component {
     </div>
 
     @if ($season->getBannerPath())
-        <div class="overflow-hidden rounded-xl">
+        <div class="overflow-hidden rounded-xl pointer-events-none">
             <img src="{{ Storage::url($season->getBannerPath()) }}" alt="{{ $season->name }}" class="w-full h-auto max-h-64 object-cover" />
         </div>
     @endif
 
-    <div class="flex gap-2 border-b border-zinc-200 dark:border-zinc-700">
+    <div class="flex gap-2 border-b border-zinc-200 dark:border-zinc-700 relative z-20">
         <button
             wire:click="$set('activeTab', 'overview')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $activeTab === 'overview' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            class="px-4 py-2 text-sm font-medium transition-colors relative z-10 {{ $activeTab === 'overview' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
         >
             {{ __('Übersicht') }}
         </button>
 
         <button
             wire:click="$set('activeTab', 'schedule')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $activeTab === 'schedule' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            class="px-4 py-2 text-sm font-medium transition-colors relative z-10 {{ $activeTab === 'schedule' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
         >
             {{ __('Spielplan') }}
         </button>
 
         <button
             wire:click="$set('activeTab', 'standings')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $activeTab === 'standings' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            class="px-4 py-2 text-sm font-medium transition-colors relative z-10 {{ $activeTab === 'standings' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
         >
             {{ __('Tabelle') }}
         </button>
 
         <button
             wire:click="$set('activeTab', 'results')"
-            class="px-4 py-2 text-sm font-medium transition-colors {{ $activeTab === 'results' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            class="px-4 py-2 text-sm font-medium transition-colors relative z-10 {{ $activeTab === 'results' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
         >
             {{ __('Ergebnisse') }}
         </button>
@@ -153,6 +252,138 @@ new class extends Component {
                     </div>
                 </dl>
             </div>
+
+            @if ($nextMatchday)
+                @php
+                    $fixtureCompleted = $nextMatchdayFixture && ($nextMatchdayFixture->dart_match_id !== null || $nextMatchdayFixture->status === 'completed');
+                @endphp
+                <div class="rounded-xl border {{ $fixtureCompleted ? 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900' : 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:border-green-800 dark:from-green-950/30 dark:to-emerald-950/30' }} p-6 shadow-sm">
+                    <flux:heading size="lg" class="mb-4 {{ $fixtureCompleted ? 'text-neutral-900 dark:text-neutral-100' : 'text-green-900 dark:text-green-100' }}">{{ __('Schnelleinstieg') }}</flux:heading>
+                    @if (!$fixtureCompleted)
+                        <p class="mb-4 text-sm {{ $fixtureCompleted ? 'text-neutral-600 dark:text-neutral-400' : 'text-green-700 dark:text-green-300' }}">{{ __('Starte dein Spiel für diesen Spieltag') }}</p>
+                    @endif
+
+                    @if ($message)
+                        <div class="mb-4 rounded-lg border p-3 {{ $success ? 'border-green-300 bg-green-100 dark:border-green-700 dark:bg-green-900/30' : 'border-red-300 bg-red-100 dark:border-red-700 dark:bg-red-900/30' }}">
+                            <p class="text-sm font-medium {{ $success ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100' }}">
+                                {{ $message }}
+                            </p>
+                        </div>
+                    @endif
+                    
+                    @error('matchday')
+                        <div class="mb-4 rounded-lg border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-900/30">
+                            <p class="text-sm font-medium text-red-900 dark:text-red-100">
+                                {{ $message }}
+                            </p>
+                        </div>
+                    @enderror
+
+                    @php
+                        $isActive = $nextMatchday->isCurrentlyActive();
+                        $isPlaying = $playingMatchdayId === $nextMatchday->id;
+                        $fixtureCompleted = $nextMatchdayFixture && ($nextMatchdayFixture->dart_match_id !== null || $nextMatchdayFixture->status === 'completed');
+                    @endphp
+
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <a href="{{ route('seasons.show', $season) }}" wire:navigate>
+                                    <flux:badge size="sm" variant="subtle" class="hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer">
+                                        {{ __('Spieltag :number', ['number' => $nextMatchday->matchday_number]) }}
+                                    </flux:badge>
+                                </a>
+                                @if ($isActive)
+                                    <flux:badge size="sm" variant="success">
+                                        {{ __('Aktiv') }}
+                                    </flux:badge>
+                                @elseif ($nextMatchday->isUpcoming())
+                                    <flux:badge size="sm" variant="primary">
+                                        {{ __('Bevorstehend') }}
+                                    </flux:badge>
+                                @endif
+                            </div>
+                            
+                            @if ($season->league)
+                                <a href="{{ route('leagues.show', $season->league) }}" wire:navigate class="block mt-1">
+                                    <p class="text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                        {{ $season->league->name }}
+                                    </p>
+                                </a>
+                            @endif
+
+                            @if ($nextMatchdayFixture)
+                                <div class="mt-2 flex items-center gap-2 text-sm">
+                                    <span class="font-medium {{ $nextMatchdayFixture->home_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300' }}">
+                                        @if ($nextMatchdayFixture->homePlayer?->user)
+                                            <a href="{{ route('users.show', $nextMatchdayFixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $nextMatchdayFixture->homePlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $nextMatchdayFixture->homePlayer->name }}
+                                        @endif
+                                    </span>
+                                    <span class="text-zinc-500 dark:text-zinc-400">vs</span>
+                                    <span class="font-medium {{ $nextMatchdayFixture->away_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300' }}">
+                                        @if ($nextMatchdayFixture->awayPlayer?->user)
+                                            <a href="{{ route('users.show', $nextMatchdayFixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                {{ $nextMatchdayFixture->awayPlayer->name }}
+                                            </a>
+                                        @else
+                                            {{ $nextMatchdayFixture->awayPlayer->name }}
+                                        @endif
+                                    </span>
+                                </div>
+                            @endif
+
+                            @if ($nextMatchday->deadline_at)
+                                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Deadline: :date', ['date' => $nextMatchday->deadline_at->format('d.m.Y H:i')]) }}
+                                </p>
+                            @endif
+
+                            @if ($isPlaying)
+                                <p class="mt-2 text-sm font-medium text-blue-600 dark:text-blue-400">
+                                    {{ __('Warte auf eingehendes Spiel...') }}
+                                </p>
+                            @endif
+                        </div>
+
+                        @if (!$fixtureCompleted)
+                            <div class="flex gap-2">
+                                @if ($isPlaying)
+                                    <flux:button
+                                        variant="danger"
+                                        wire:click="stopMatchday"
+                                        wire:loading.attr="disabled"
+                                    >
+                                        {{ __('Abbrechen') }}
+                                    </flux:button>
+                                @else
+                                    <flux:button
+                                        variant="primary"
+                                        color="{{ $isActive ? 'green' : 'blue' }}"
+                                        wire:click="startMatchday({{ $nextMatchday->id }})"
+                                        wire:loading.attr="disabled"
+                                    >
+                                        {{ $isActive ? __('Jetzt spielen') : __('Spiel starten') }}
+                                    </flux:button>
+                                @endif
+                            </div>
+                        @elseif ($nextMatchdayFixture->dartMatch)
+                            <div class="flex gap-2">
+                                <flux:button
+                                    variant="outline"
+                                    :href="route('matches.show', $nextMatchdayFixture->dartMatch)"
+                                    wire:navigate
+                                >
+                                    {{ __('Match ansehen') }}
+                                </flux:button>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
 
             @if ($myParticipant)
                 <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">

@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -36,6 +37,7 @@ class User extends Authenticatable
         'autodarts_name',
         'discord_username',
         'discord_id',
+        'playing_matchday_id',
     ];
 
     /**
@@ -82,6 +84,14 @@ class User extends Authenticatable
     public function player(): HasOne
     {
         return $this->hasOne(Player::class);
+    }
+
+    /**
+     * Get the matchday the user is currently playing
+     */
+    public function playingMatchday(): BelongsTo
+    {
+        return $this->belongsTo(Matchday::class, 'playing_matchday_id');
     }
 
     /**
