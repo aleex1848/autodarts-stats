@@ -27,6 +27,8 @@ RUN if [ "$INSTALL_DEV_DEPS" = "true" ]; then \
 
 FROM node:25 AS frontend
 ARG REVERB_HOST=myHost
+# Cache-Busting: Wenn sich REVERB_HOST ändert, wird der Cache invalidiert
+ARG REVERB_HOST_CACHE_BUST=${REVERB_HOST}
 # Stelle sicher, dass das public Verzeichnis existiert (Vite benötigt es für den Build)
 RUN mkdir -p /app/public
 COPY package.json \
@@ -64,7 +66,48 @@ RUN echo "=== Frontend Build Debug ===" && \
     echo "=== Verfügbare VITE_ Umgebungsvariablen ===" && \
     env | grep "^VITE_" || echo "Keine VITE_ Variablen gefunden" && \
     echo "==========================================="
-RUN npm install && npm run build
+# Stelle sicher, dass die Umgebungsvariablen beim Build verfügbar sind
+# Cache-Busting durch REVERB_HOST_CACHE_BUST: Wenn sich REVERB_HOST ändert, wird dieser Layer neu gebaut
+RUN echo "Cache-Bust für REVERB_HOST: ${REVERB_HOST_CACHE_BUST}" && npm install
+# Führe den Build mit expliziten Umgebungsvariablen aus
+# WICHTIG: Die Umgebungsvariablen müssen zur Build-Zeit verfügbar sein, damit Vite sie in den Code einbettet
+RUN echo "=== Starte Vite Build mit folgenden Werten ===" && \
+    echo "VITE_REVERB_HOST=${VITE_REVERB_HOST}" && \
+    echo "VITE_REVERB_PORT=${VITE_REVERB_PORT}" && \
+    echo "VITE_REVERB_SCHEME=${VITE_REVERB_SCHEME}" && \
+    VITE_REVERB_HOST="${VITE_REVERB_HOST}" \
+    VITE_REVERB_PORT="${VITE_REVERB_PORT}" \
+    VITE_REVERB_SCHEME="${VITE_REVERB_SCHEME}" \
+    npm run build && \
+    echo "=== Vite Build abgeschlossen ==="
+# Verifiziere, dass der richtige Wert im kompilierten Code ist
+RUN echo "=== Verifiziere kompilierten Code ===" && \
+    echo "Erwarteter REVERB_HOST: ${REVERB_HOST}" && \
+    JS_FILES=$(find /app/public/build/assets -name "*.js" 2>/dev/null | head -1) && \
+    if [ -n "$JS_FILES" ] && [ -f "$JS_FILES" ]; then \
+        echo "Prüfe kompilierte JS-Datei: $JS_FILES" && \
+        echo "--- Suche nach wsHost Konfiguration ---" && \
+        grep -o 'wsHost[^,}]*' "$JS_FILES" | head -3 || echo "wsHost nicht gefunden" && \
+        echo "--- Suche nach REVERB_HOST Wert (erwartet: ${REVERB_HOST}) ---" && \
+        if grep -q "${REVERB_HOST}" "$JS_FILES" 2>/dev/null; then \
+            echo "✓ Erwarteter REVERB_HOST Wert gefunden: ${REVERB_HOST}"; \
+        else \
+            echo "✗ Erwarteter REVERB_HOST Wert NICHT gefunden: ${REVERB_HOST}"; \
+            echo "Gefundene wsHost Werte:"; \
+            grep -oP 'wsHost["\s]*:["\s]*["\s]*[^",}]+' "$JS_FILES" | head -3 || echo "Keine wsHost Werte gefunden"; \
+        fi && \
+        echo "--- Prüfe auf falsche Werte (ads-socket.localhost) ---" && \
+        if grep -q "ads-socket.localhost" "$JS_FILES" 2>/dev/null; then \
+            echo "⚠ WARNUNG: ads-socket.localhost gefunden - das ist der DEV-Wert!"; \
+            grep -o 'ads-socket.localhost[^"]*' "$JS_FILES" | head -3; \
+        else \
+            echo "✓ Kein ads-socket.localhost gefunden"; \
+        fi; \
+    else \
+        echo "⚠ Keine JS-Dateien gefunden in /app/public/build/assets/"; \
+        ls -la /app/public/build/assets/ 2>/dev/null || echo "Assets-Verzeichnis existiert nicht"; \
+    fi && \
+    echo "====================================="
 # Verifiziere, dass die Build-Artefakte erstellt wurden (inkl. manifest.json)
 RUN echo "=== Build-Artefakte im frontend-Stage ===" && \
     ls -lah /app/public/build/ && \
