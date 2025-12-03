@@ -576,7 +576,14 @@
             @if ($winner)
                 <div class="mt-4 rounded-lg bg-emerald-50 p-4 dark:bg-emerald-900/20">
                     <div class="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-                        {{ __('Gewinner: :name', ['name' => $winner->player?->user ? '<a href="' . route('users.show', $winner->player->user) . '" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">' . $winner->player->name . '</a>' : $winner->player->name]) }}
+                        {{ __('Gewinner:') }}
+                        @if ($winner->player?->user)
+                            <a href="{{ route('users.show', $winner->player->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                {{ $winner->player->name }}
+                            </a>
+                        @else
+                            {{ $winner->player->name }}
+                        @endif
                     </div>
                     <div class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
                         {{ __('Beginnt das Spiel') }}
