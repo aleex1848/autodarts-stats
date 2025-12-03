@@ -140,7 +140,7 @@ new class extends Component
     public function with(): array
     {
         $user = Auth::user();
-        $webhookUrl = config('app.url') . '/play';
+        $webhookUrl = config('app.url') . '/api/webhooks';
         $hasPlayer = $user->player !== null;
         
         // Only show success if player was just identified (success is true and we have a player)

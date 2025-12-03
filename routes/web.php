@@ -13,8 +13,6 @@ use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 use Livewire\Volt\Volt;
 
-Route::webhooks('play','play')->middleware('auth:sanctum');
-
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
