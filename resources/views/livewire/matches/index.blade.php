@@ -290,13 +290,35 @@ new class extends Component {
                             </td>
                             <td class="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
                                 @if ($match->finished_at)
-                                    @if ($match->winner)
-                                        <span class="font-semibold text-emerald-600 dark:text-emerald-400">
-                                            {{ $match->winner->is($player) ? __('Gewonnen') : __('Verloren') }}
-                                        </span>
-                                    @else
-                                        <span class="text-zinc-500 dark:text-zinc-400">{{ __('Beendet') }}</span>
-                                    @endif
+                                    <div class="flex flex-col gap-1">
+                                        @if ($match->winner)
+                                            <span class="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                {{ $match->winner->is($player) ? __('Gewonnen') : __('Verloren') }}
+                                            </span>
+                                        @else
+                                            <span class="text-zinc-500 dark:text-zinc-400">{{ __('Beendet') }}</span>
+                                        @endif
+                                        @if ($match->players->count() === 2)
+                                            @php
+                                                $player1Legs = $match->players->first()->pivot->legs_won ?? 0;
+                                                $player2Legs = $match->players->last()->pivot->legs_won ?? 0;
+                                            @endphp
+                                            <span class="text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                                                {{ $player1Legs }}:{{ $player2Legs }}
+                                            </span>
+                                        @else
+                                            <div class="flex flex-wrap gap-1 text-xs">
+                                                @foreach ($match->players as $participant)
+                                                    <span class="font-mono text-zinc-600 dark:text-zinc-400">
+                                                        {{ $participant->pivot->legs_won ?? 0 }}
+                                                    </span>
+                                                    @if (!$loop->last)
+                                                        <span class="text-zinc-400 dark:text-zinc-500">:</span>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
                                 @else
                                     <span class="text-zinc-500 dark:text-zinc-400">{{ __('Noch offen') }}</span>
                                 @endif
