@@ -3,25 +3,63 @@
 use App\Enums\RoleName;
 use Illuminate\Validation\Rule;
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 new class extends Component {
+    use WithPagination;
+
+    // Role properties
     public ?int $editingRoleId = null;
     public string $name = '';
     public array $selectedPermissions = [];
-    public string $newPermissionName = '';
     public bool $showRoleFormModal = false;
     public bool $showRoleDeleteModal = false;
     public ?int $roleIdBeingDeleted = null;
     public ?string $roleNameBeingDeleted = null;
     public bool $isProtectedRole = false;
 
+    // Permission properties
+    public ?int $editingPermissionId = null;
+    public string $permissionName = '';
+    public string $permissionSearch = '';
+    public bool $showPermissionFormModal = false;
+    public bool $showPermissionDeleteModal = false;
+    public ?int $permissionIdBeingDeleted = null;
+    public ?string $permissionNameBeingDeleted = null;
+
+    // Tab state
+    public string $activeTab = 'roles';
+
+    protected $queryString = [
+        'permissionSearch' => ['except' => ''],
+        'page' => ['except' => 1],
+        'activeTab' => ['except' => 'roles'],
+    ];
+
+    public function updatingPermissionSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingActiveTab(): void
+    {
+        $this->resetPage();
+    }
+
     public function with(): array
     {
+        $permissionsQuery = Permission::query()->with('roles');
+
+        if ($this->permissionSearch !== '') {
+            $permissionsQuery->where('name', 'like', '%' . $this->permissionSearch . '%');
+        }
+
         return [
             'roles' => Role::query()->with('permissions')->orderBy('name')->get(),
-            'permissions' => Permission::query()->orderBy('name')->get(),
+            'permissions' => $permissionsQuery->orderBy('name')->paginate(15),
+            'allPermissions' => Permission::query()->orderBy('name')->get(),
         ];
     }
 
@@ -31,9 +69,11 @@ new class extends Component {
             'name' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.roles'), 'name')->ignore($this->editingRoleId)],
             'selectedPermissions' => ['nullable', 'array'],
             'selectedPermissions.*' => ['string', Rule::exists(config('permission.table_names.permissions'), 'name')],
+            'permissionName' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.permissions'), 'name')->ignore($this->editingPermissionId)],
         ];
     }
 
+    // Role methods
     public function openCreateModal(): void
     {
         $this->resetRoleForm();
@@ -46,7 +86,7 @@ new class extends Component {
 
         $this->editingRoleId = $role->id;
         $this->name = $role->name;
-        $this->selectedPermissions = $role->permissions->pluck('name')->toArray();
+        $this->selectedPermissions = $role->permissions->pluck('name')->values()->toArray();
         $this->isProtectedRole = $role->name === RoleName::SuperAdmin->value;
         $this->showRoleFormModal = true;
     }
@@ -125,48 +165,129 @@ new class extends Component {
 
     protected function resetRoleForm(): void
     {
-        $this->reset('editingRoleId', 'name', 'selectedPermissions', 'isProtectedRole', 'newPermissionName');
+        $this->reset('editingRoleId', 'name', 'selectedPermissions', 'isProtectedRole');
     }
 
-    public function addPermission(): void
+    // Permission methods
+    public function openCreatePermissionModal(): void
+    {
+        $this->resetPermissionForm();
+        $this->showPermissionFormModal = true;
+    }
+
+    public function editPermission(int $permissionId): void
+    {
+        $permission = Permission::findOrFail($permissionId);
+
+        $this->editingPermissionId = $permission->id;
+        $this->permissionName = $permission->name;
+        $this->showPermissionFormModal = true;
+    }
+
+    public function savePermission(): void
     {
         $validated = $this->validate([
-            'newPermissionName' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique(config('permission.table_names.permissions'), 'name'),
-            ],
+            'permissionName' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.permissions'), 'name')->ignore($this->editingPermissionId)],
         ]);
 
-        $permission = Permission::create([
-            'name' => $validated['newPermissionName'],
-            'guard_name' => 'web',
-        ]);
+        if ($this->editingPermissionId) {
+            $permission = Permission::findOrFail($this->editingPermissionId);
+            $permission->update(['name' => $validated['permissionName']]);
+        } else {
+            Permission::create([
+                'name' => $validated['permissionName'],
+                'guard_name' => 'web',
+            ]);
+            $this->resetPage();
+        }
 
-        $this->selectedPermissions = collect($this->selectedPermissions)
-            ->push($permission->name)
-            ->unique()
-            ->values()
-            ->toArray();
+        $this->showPermissionFormModal = false;
+        $this->resetPermissionForm();
 
-        $this->reset('newPermissionName');
+        $this->dispatch('notify', title: __('Berechtigung gespeichert'));
+    }
+
+    public function confirmPermissionDelete(int $permissionId): void
+    {
+        $permission = Permission::findOrFail($permissionId);
+
+        // Check if permission is used by any role
+        $rolesUsingPermission = $permission->roles()->count();
+        if ($rolesUsingPermission > 0) {
+            $this->addError('deletePermission', __('Diese Berechtigung wird von :count Rolle(n) verwendet und kann nicht gelöscht werden.', ['count' => $rolesUsingPermission]));
+
+            return;
+        }
+
+        $this->permissionIdBeingDeleted = $permission->id;
+        $this->permissionNameBeingDeleted = $permission->name;
+        $this->showPermissionDeleteModal = true;
+    }
+
+    public function deletePermission(): void
+    {
+        if ($this->permissionIdBeingDeleted) {
+            $permission = Permission::findOrFail($this->permissionIdBeingDeleted);
+            $permission->delete();
+            $this->resetPage();
+        }
+
+        $this->showPermissionDeleteModal = false;
+        $this->reset('permissionIdBeingDeleted', 'permissionNameBeingDeleted');
+
+        $this->dispatch('notify', title: __('Berechtigung gelöscht'));
+    }
+
+    public function updatedShowPermissionFormModal(bool $isOpen): void
+    {
+        if (! $isOpen) {
+            $this->resetPermissionForm();
+        }
+    }
+
+    public function updatedShowPermissionDeleteModal(bool $isOpen): void
+    {
+        if (! $isOpen) {
+            $this->reset('permissionIdBeingDeleted', 'permissionNameBeingDeleted');
+        }
+    }
+
+    protected function resetPermissionForm(): void
+    {
+        $this->reset('editingPermissionId', 'permissionName');
     }
 }; ?>
 
 <section class="w-full space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <flux:heading size="xl">{{ __('Rollenverwaltung') }}</flux:heading>
-            <flux:subheading>{{ __('Erstelle Rollen und verwalte ihre Berechtigungen') }}</flux:subheading>
-        </div>
-
-        <flux:button icon="plus" variant="primary" wire:click="openCreateModal">
-            {{ __('Rolle anlegen') }}
-        </flux:button>
+    <div>
+        <flux:heading size="xl">{{ __('Rollen & Berechtigungen') }}</flux:heading>
+        <flux:subheading>{{ __('Verwalte Rollen und Berechtigungen für deine Anwendung') }}</flux:subheading>
     </div>
 
-    <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+    <flux:tab.group>
+        <flux:tabs variant="segmented" wire:model="activeTab">
+            <flux:tab name="roles" icon="key">
+                {{ __('Rollen') }}
+            </flux:tab>
+            <flux:tab name="permissions" icon="lock-closed">
+                {{ __('Berechtigungen') }}
+            </flux:tab>
+        </flux:tabs>
+
+        <flux:tab.panel name="roles">
+            <div class="space-y-6">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <flux:heading size="lg">{{ __('Rollenverwaltung') }}</flux:heading>
+                        <flux:subheading>{{ __('Erstelle Rollen und verwalte ihre Berechtigungen') }}</flux:subheading>
+                    </div>
+
+                    <flux:button icon="plus" variant="primary" wire:click="openCreateModal">
+                        {{ __('Rolle anlegen') }}
+                    </flux:button>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
             <thead class="bg-zinc-50 dark:bg-zinc-800">
                 <tr>
@@ -224,8 +345,100 @@ new class extends Component {
                 @endforelse
             </tbody>
         </table>
-    </div>
+                </div>
+            </div>
+        </flux:tab.panel>
 
+        <flux:tab.panel name="permissions">
+            <div class="space-y-6">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <flux:heading size="lg">{{ __('Berechtigungsverwaltung') }}</flux:heading>
+                        <flux:subheading>{{ __('Erstelle und verwalte Berechtigungen') }}</flux:subheading>
+                    </div>
+
+                    <flux:button icon="plus" variant="primary" wire:click="openCreatePermissionModal">
+                        {{ __('Berechtigung anlegen') }}
+                    </flux:button>
+                </div>
+
+                @error('deletePermission')
+                    <flux:callout variant="danger" icon="exclamation-triangle">
+                        {{ $message }}
+                    </flux:callout>
+                @enderror
+
+                <flux:input
+                    wire:model.live.debounce.300ms="permissionSearch"
+                    icon="magnifying-glass"
+                    :placeholder="__('Berechtigung suchen...')"
+                />
+
+                <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                    <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
+                        <thead class="bg-zinc-50 dark:bg-zinc-800">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                                    {{ __('Name') }}
+                                </th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                                    {{ __('Verwendet von Rollen') }}
+                                </th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                                    {{ __('Aktionen') }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                            @forelse ($permissions as $permission)
+                                <tr wire:key="permission-{{ $permission->id }}">
+                                    <td class="px-4 py-3 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                        {{ $permission->name }}
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
+                                        @php
+                                            $rolesCount = $permission->roles()->count();
+                                        @endphp
+                                        @if ($rolesCount > 0)
+                                            <div class="flex flex-wrap gap-2">
+                                                @foreach ($permission->roles as $role)
+                                                    <flux:badge size="sm" variant="subtle">{{ $role->name }}</flux:badge>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <flux:text class="text-xs text-zinc-500">{{ __('Keine Rollen') }}</flux:text>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <div class="flex justify-end gap-2">
+                                            <flux:button size="xs" variant="outline" wire:click="editPermission({{ $permission->id }})">
+                                                {{ __('Bearbeiten') }}
+                                            </flux:button>
+                                            <flux:button size="xs" variant="danger" wire:click="confirmPermissionDelete({{ $permission->id }})">
+                                                {{ __('Löschen') }}
+                                            </flux:button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="3" class="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                                        {{ __('Keine Berechtigungen vorhanden.') }}
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    {{ $permissions->links() }}
+                </div>
+            </div>
+        </flux:tab.panel>
+    </flux:tab.group>
+
+    {{-- Role Modals --}}
     <flux:modal wire:model="showRoleFormModal" class="space-y-6">
         <div>
             <flux:heading size="lg">
@@ -245,43 +458,20 @@ new class extends Component {
                 :disabled="$isProtectedRole"
             />
 
-            <flux:select
+            <flux:pillbox
                 wire:model="selectedPermissions"
                 :label="__('Berechtigungen')"
-                multiple
+                searchable
+                :placeholder="__('Berechtigungen auswählen...')"
+                :search:placeholder="__('Berechtigungen suchen...')"
                 :disabled="$isProtectedRole"
             >
-                @foreach ($permissions as $permission)
-                    <option value="{{ $permission->name }}">{{ $permission->name }}</option>
+                @foreach ($allPermissions as $permission)
+                    <flux:pillbox.option value="{{ $permission->name }}">
+                        {{ $permission->name }}
+                    </flux:pillbox.option>
                 @endforeach
-            </flux:select>
-
-            @unless($isProtectedRole)
-                <div class="space-y-2">
-                    <flux:heading size="sm">{{ __('Neue Berechtigung hinzufügen') }}</flux:heading>
-                    <div class="flex flex-col gap-3 sm:flex-row">
-                        <flux:input
-                            wire:model="newPermissionName"
-                            :label="__('Name der Berechtigung')"
-                            type="text"
-                            class="flex-1"
-                        />
-
-                        <flux:button
-                            type="button"
-                            variant="outline"
-                            class="sm:mt-6 sm:w-auto"
-                            wire:click="addPermission"
-                        >
-                            {{ __('Hinzufügen') }}
-                        </flux:button>
-                    </div>
-
-                    @error('newPermissionName')
-                        <flux:text class="text-sm text-red-500">{{ $message }}</flux:text>
-                    @enderror
-                </div>
-            @endunless
+            </flux:pillbox>
 
             <div class="flex justify-end gap-2">
                 <flux:button type="button" variant="ghost" wire:click="$set('showRoleFormModal', false)">
@@ -309,6 +499,58 @@ new class extends Component {
             </flux:button>
 
             <flux:button variant="danger" wire:click="deleteRole">
+            {{ __('Löschen') }}
+        </flux:button>
+        </div>
+    </flux:modal>
+
+    {{-- Permission Modals --}}
+    <flux:modal wire:model="showPermissionFormModal" class="space-y-6">
+        <div>
+            <flux:heading size="lg">
+                {{ $editingPermissionId ? __('Berechtigung bearbeiten') : __('Berechtigung anlegen') }}
+            </flux:heading>
+            <flux:subheading>
+                {{ __('Erstelle eine neue Berechtigung, die Rollen zugewiesen werden kann.') }}
+            </flux:subheading>
+        </div>
+
+        <form wire:submit="savePermission" class="space-y-4">
+            <flux:input
+                wire:model="permissionName"
+                :label="__('Name')"
+                type="text"
+                required
+                placeholder="z.B. leagues.create, matches.edit"
+            />
+
+            <div class="flex justify-end gap-2">
+                <flux:button type="button" variant="ghost" wire:click="$set('showPermissionFormModal', false)">
+                    {{ __('Abbrechen') }}
+                </flux:button>
+
+                <flux:button type="submit" variant="primary">
+                    {{ $editingPermissionId ? __('Aktualisieren') : __('Anlegen') }}
+                </flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Permission Delete Modal --}}
+    <flux:modal wire:model="showPermissionDeleteModal" class="space-y-6">
+        <div>
+            <flux:heading size="lg">{{ __('Berechtigung löschen') }}</flux:heading>
+            <flux:subheading>
+                {{ __('Soll die Berechtigung ":name" dauerhaft gelöscht werden?', ['name' => $permissionNameBeingDeleted]) }}
+            </flux:subheading>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <flux:button variant="ghost" wire:click="$set('showPermissionDeleteModal', false)">
+                {{ __('Abbrechen') }}
+            </flux:button>
+
+            <flux:button variant="danger" wire:click="deletePermission">
                 {{ __('Löschen') }}
             </flux:button>
         </div>
