@@ -20,6 +20,7 @@ new class extends Component {
     public $importFile = null;
     public bool $importOverwrite = false;
     public bool $showImportModal = false;
+    public int $page = 1;
 
     protected $queryString = [
         'search' => ['except' => ''],
@@ -70,7 +71,8 @@ new class extends Component {
             ])
             ->whereHas('players', fn ($query) => $query->where('players.id', $this->playerId))
             ->when($this->statusFilter === 'finished', fn ($query) => $query->whereNotNull('finished_at'))
-            ->when($this->statusFilter === 'ongoing', fn ($query) => $query->whereNull('finished_at'))
+            ->when($this->statusFilter === 'ongoing', fn ($query) => $query->whereNull('finished_at')->where('is_incomplete', false))
+            ->when($this->statusFilter === 'incomplete', fn ($query) => $query->where('is_incomplete', true))
             ->when($this->search !== '', function ($query) {
                 $searchTerm = '%' . $this->search . '%';
 
@@ -226,6 +228,7 @@ new class extends Component {
             <flux:select wire:model.live="statusFilter" :label="__('Status')" class="lg:col-span-1">
                 <option value="all">{{ __('Alle') }}</option>
                 <option value="ongoing">{{ __('Laufend') }}</option>
+                <option value="incomplete">{{ __('Unvollständig') }}</option>
                 <option value="finished">{{ __('Beendet') }}</option>
             </flux:select>
         </div>
@@ -319,8 +322,13 @@ new class extends Component {
                                             </div>
                                         @endif
                                     </div>
+                                @elseif ($match->is_incomplete)
+                                    <div class="flex flex-col gap-1">
+                                        <span class="font-semibold text-orange-600 dark:text-orange-400">{{ __('Unvollständig') }}</span>
+                                        <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Das Spiel wurde nicht vollständig aufgezeichnet.') }}</span>
+                                    </div>
                                 @else
-                                    <span class="text-zinc-500 dark:text-zinc-400">{{ __('Noch offen') }}</span>
+                                    <span class="text-zinc-500 dark:text-zinc-400">{{ __('Laufend') }}</span>
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-right text-sm">

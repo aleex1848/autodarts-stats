@@ -385,6 +385,12 @@ new class extends Component
         </div>
     @endif
 
+    @if ($match->is_incomplete)
+        <flux:callout variant="warning" icon="exclamation-triangle">
+            {{ __('Dieses Match wurde als unvollständig markiert. Das Spiel wurde möglicherweise nicht vollständig aufgezeichnet oder abgebrochen.') }}
+        </flux:callout>
+    @endif
+
     @hasanyrole('Super-Admin|Admin')
         <div class="flex justify-end gap-2">
             <flux:button

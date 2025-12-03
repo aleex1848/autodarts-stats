@@ -1,5 +1,11 @@
 @php
-    $statusBadge = $match->finished_at ? ['label' => __('Beendet'), 'variant' => 'success'] : ['label' => __('Laufend'), 'variant' => 'warning'];
+    if ($match->finished_at) {
+        $statusBadge = ['label' => __('Beendet'), 'variant' => 'success'];
+    } elseif ($match->is_incomplete) {
+        $statusBadge = ['label' => __('Unvollständig'), 'variant' => 'danger'];
+    } else {
+        $statusBadge = ['label' => __('Laufend'), 'variant' => 'warning'];
+    }
     $duration = ($match->started_at && $match->finished_at)
         ? $match->started_at->diffForHumans($match->finished_at, [
             'syntax' => \Carbon\CarbonInterface::DIFF_ABSOLUTE,
