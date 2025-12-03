@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         @include('partials.head')
     </head>
@@ -188,6 +188,21 @@
                     />
                 </flux:tooltip>
             </flux:navbar>
+
+            {{-- Dark Mode Toggle --}}
+            <flux:dropdown x-data align="end">
+                <flux:button variant="ghost" square aria-label="{{ __('Farbschema ändern') }}" class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300">
+                    <flux:icon.sun x-show="$flux.appearance === 'light'" variant="mini" />
+                    <flux:icon.moon x-show="$flux.appearance === 'dark'" variant="mini" />
+                    <flux:icon.moon x-show="$flux.appearance === 'system' && $flux.dark" variant="mini" />
+                    <flux:icon.sun x-show="$flux.appearance === 'system' && ! $flux.dark" variant="mini" />
+                </flux:button>
+                <flux:menu>
+                    <flux:menu.item icon="sun" x-on:click="$flux.appearance = 'light'">{{ __('Light') }}</flux:menu.item>
+                    <flux:menu.item icon="moon" x-on:click="$flux.appearance = 'dark'">{{ __('Dark') }}</flux:menu.item>
+                    <flux:menu.item icon="computer-desktop" x-on:click="$flux.appearance = 'system'">{{ __('System') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
 
             <!-- Desktop User Menu -->
             <flux:dropdown position="top" align="end">

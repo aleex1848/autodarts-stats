@@ -27,3 +27,15 @@
 
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @fluxAppearance
+
+{{-- Set default appearance to 'dark' if no preference is stored --}}
+<script>
+    (function() {
+        // Check if appearance preference exists in localStorage
+        // Flux UI typically uses 'flux-appearance' as the key
+        const appearanceKey = 'flux-appearance';
+        if (!localStorage.getItem(appearanceKey)) {
+            localStorage.setItem(appearanceKey, 'dark');
+        }
+    })();
+</script>
