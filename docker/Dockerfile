@@ -46,6 +46,24 @@ ENV REVERB_PORT=443
 ENV REVERB_SCHEME=https
 ENV NODE_ENV=production
 WORKDIR /app
+# Debug-Ausgabe für REVERB_HOST (maskiert für Sicherheit)
+RUN echo "=== Frontend Build Debug ===" && \
+    if [ -n "$REVERB_HOST" ]; then \
+        REVERB_HOST_LENGTH=$(echo -n "$REVERB_HOST" | wc -c); \
+        REVERB_HOST_PREVIEW=$(echo "$REVERB_HOST" | cut -c1-3); \
+        REVERB_HOST_SUFFIX=$(echo "$REVERB_HOST" | rev | cut -c1-3 | rev); \
+        echo "✓ REVERB_HOST ist gesetzt"; \
+        echo "  Länge: ${REVERB_HOST_LENGTH} Zeichen"; \
+        echo "  Vorschau: ${REVERB_HOST_PREVIEW}...${REVERB_HOST_SUFFIX}"; \
+        echo "  Vollständiger Wert wird für Build verwendet"; \
+    else \
+        echo "✗ REVERB_HOST ist NICHT gesetzt (verwendet Default: myHost)"; \
+    fi && \
+    echo "VITE_REVERB_HOST=${VITE_REVERB_HOST}" && \
+    echo "==============================" && \
+    echo "=== Verfügbare VITE_ Umgebungsvariablen ===" && \
+    env | grep "^VITE_" || echo "Keine VITE_ Variablen gefunden" && \
+    echo "==========================================="
 RUN npm install && npm run build
 # Verifiziere, dass die Build-Artefakte erstellt wurden (inkl. manifest.json)
 RUN echo "=== Build-Artefakte im frontend-Stage ===" && \

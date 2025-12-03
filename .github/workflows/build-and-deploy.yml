@@ -25,6 +25,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
+      - name: Debug Build Args
+        run: |
+          echo "=== Build-Argumente Debug ==="
+          if [ -n "${{ secrets.REVERB_HOST }}" ]; then
+            REVERB_HOST_LENGTH=${#REVERB_HOST}
+            REVERB_HOST_PREVIEW=$(echo "${{ secrets.REVERB_HOST }}" | cut -c1-3)
+            REVERB_HOST_SUFFIX=$(echo "${{ secrets.REVERB_HOST }}" | rev | cut -c1-3 | rev)
+            echo "✓ REVERB_HOST ist gesetzt"
+            echo "  Länge: ${REVERB_HOST_LENGTH} Zeichen"
+            echo "  Vorschau: ${REVERB_HOST_PREVIEW}...${REVERB_HOST_SUFFIX}"
+          else
+            echo "✗ REVERB_HOST ist NICHT gesetzt (Secret fehlt oder ist leer)"
+          fi
+          echo "=============================="
+        env:
+          REVERB_HOST: ${{ secrets.REVERB_HOST }}
+
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
