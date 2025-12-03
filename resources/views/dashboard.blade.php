@@ -17,9 +17,10 @@
             </div>
         @endif
 
-        {{-- Dein Spieltag - Prominent zentral positioniert --}}
+        {{-- Dein Spieltag / Get Ready - Prominent zentral positioniert --}}
         <div class="flex justify-center px-4 md:px-8 lg:px-16">
             <div class="w-full max-w-4xl">
+                <livewire:get-ready />
                 <livewire:quick-start-matchday />
             </div>
         </div>
