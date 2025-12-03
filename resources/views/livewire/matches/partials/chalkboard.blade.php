@@ -43,7 +43,7 @@
         <div class="flex items-center gap-2">
             <flux:icon.chart-bar class="size-4 text-slate-300" />
             <span class="font-medium text-slate-100">
-                {{ __('Kreidetafel-Ansicht') }}
+                {{ __('Chalkboard') }}
             </span>
         </div>
         <flux:icon.chevron-down 

@@ -593,159 +593,336 @@
         </div>
     @endif
 
+    <!-- Legs-Vergleichstabelle -->
+    @if ($legs->isNotEmpty())
+        <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <div>
+                <flux:heading size="md">{{ __('Legs-Vergleich') }}</flux:heading>
+                <flux:subheading>{{ __('Übersichtliche Darstellung aller Legs zum direkten Vergleich') }}</flux:subheading>
+            </div>
+
+            @php
+                // Berechne beste Werte für Highlighting
+                $bestCheckouts = [];
+                $bestAverages = [];
+                $bestCheckoutRates = [];
+                
+                foreach ($legs as $leg) {
+                    foreach ($leg->legPlayers as $player) {
+                        if ($match->variant === 'X01') {
+                            if (!is_null($player->pivot->best_checkout_points)) {
+                                $bestCheckouts[] = $player->pivot->best_checkout_points;
+                            }
+                            if (!is_null($player->pivot->average)) {
+                                $bestAverages[] = $player->pivot->average;
+                            }
+                            if (!is_null($player->pivot->checkout_rate)) {
+                                $bestCheckoutRates[] = $player->pivot->checkout_rate * 100;
+                            }
+                        }
+                    }
+                }
+                
+                $maxBestCheckout = !empty($bestCheckouts) ? max($bestCheckouts) : null;
+                $maxBestAverage = !empty($bestAverages) ? max($bestAverages) : null;
+                $maxBestCheckoutRate = !empty($bestCheckoutRates) ? max($bestCheckoutRates) : null;
+            @endphp
+
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column sortable :sorted="$sortBy === 'set'" :direction="$sortDirection" wire:click="sort('set')">{{ __('Set') }}</flux:table.column>
+                    <flux:table.column sortable :sorted="$sortBy === 'leg'" :direction="$sortDirection" wire:click="sort('leg')">{{ __('Leg') }}</flux:table.column>
+                    <flux:table.column sortable :sorted="$sortBy === 'player'" :direction="$sortDirection" wire:click="sort('player')">{{ __('Spieler') }}</flux:table.column>
+                    <flux:table.column sortable :sorted="$sortBy === 'winner'" :direction="$sortDirection" wire:click="sort('winner')">{{ __('Gewinner') }}</flux:table.column>
+                    @if ($match->variant === 'X01')
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'average'" :direction="$sortDirection" wire:click="sort('average')">{{ __('Average') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'average_until_170'" :direction="$sortDirection" wire:click="sort('average_until_170')">{{ __('Avg. bis 170') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'first_9_average'" :direction="$sortDirection" wire:click="sort('first_9_average')">{{ __('First 9 Avg.') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'best_checkout'" :direction="$sortDirection" wire:click="sort('best_checkout')">{{ __('Best Checkout') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'darts_thrown'" :direction="$sortDirection" wire:click="sort('darts_thrown')">{{ __('Pfeile') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'checkout_rate'" :direction="$sortDirection" wire:click="sort('checkout_rate')">{{ __('Checkout %') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'busted'" :direction="$sortDirection" wire:click="sort('busted')">{{ __('BUST') }}</flux:table.column>
+                    @elseif ($match->variant === 'Cricket')
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'mpr'" :direction="$sortDirection" wire:click="sort('mpr')">{{ __('MPR') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'first_9_mpr'" :direction="$sortDirection" wire:click="sort('first_9_mpr')">{{ __('First 9 MPR') }}</flux:table.column>
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'darts_thrown'" :direction="$sortDirection" wire:click="sort('darts_thrown')">{{ __('Pfeile') }}</flux:table.column>
+                    @else
+                        <flux:table.column align="end" sortable :sorted="$sortBy === 'darts_thrown'" :direction="$sortDirection" wire:click="sort('darts_thrown')">{{ __('Pfeile') }}</flux:table.column>
+                    @endif
+                </flux:table.columns>
+                <flux:table.rows>
+                    @foreach ($sortedLegRows as $row)
+                        <flux:table.row>
+                            <flux:table.cell>{{ $row['set_number'] }}</flux:table.cell>
+                            <flux:table.cell>{{ $row['leg_number'] }}</flux:table.cell>
+                            <flux:table.cell class="font-medium">{{ $row['player_name'] }}</flux:table.cell>
+                            <flux:table.cell>
+                                @if ($row['winner'])
+                                    <flux:badge variant="success" size="sm">{{ __('Gewonnen') }}</flux:badge>
+                                @else
+                                    <span class="text-zinc-500 dark:text-zinc-400">{{ __('—') }}</span>
+                                @endif
+                            </flux:table.cell>
+                            @if ($match->variant === 'X01')
+                                <flux:table.cell align="end" variant="{{ !is_null($row['average']) && $row['average'] == $maxBestAverage ? 'strong' : 'base' }}">
+                                    @if (!is_null($row['average']))
+                                        {{ number_format((float) $row['average'], 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['average_until_170']))
+                                        {{ number_format((float) $row['average_until_170'], 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['first_9_average']))
+                                        {{ number_format((float) $row['first_9_average'], 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end" variant="{{ !is_null($row['best_checkout_points']) && $row['best_checkout_points'] == $maxBestCheckout ? 'strong' : 'base' }}">
+                                    @if (!is_null($row['best_checkout_points']))
+                                        <span class="{{ $row['best_checkout_points'] == $maxBestCheckout ? 'font-semibold text-emerald-600 dark:text-emerald-400' : '' }}">
+                                            {{ $row['best_checkout_points'] }}
+                                        </span>
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['darts_thrown']))
+                                        {{ $row['darts_thrown'] }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end" variant="{{ !is_null($row['checkout_rate']) && $row['checkout_rate'] == $maxBestCheckoutRate ? 'strong' : 'base' }}">
+                                    @if (!is_null($row['checkout_rate']))
+                                        {{ number_format((float) $row['checkout_rate'], 2, ',', '.') }}%
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if ($row['busted_count'] > 0)
+                                        <span class="font-medium text-red-600 dark:text-red-400">{{ $row['busted_count'] }}</span>
+                                    @else
+                                        0
+                                    @endif
+                                </flux:table.cell>
+                            @elseif ($match->variant === 'Cricket')
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['mpr']))
+                                        {{ number_format((float) $row['mpr'], 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['first_9_mpr']))
+                                        {{ number_format((float) $row['first_9_mpr'], 2, ',', '.') }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['darts_thrown']))
+                                        {{ $row['darts_thrown'] }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                            @else
+                                <flux:table.cell align="end">
+                                    @if (!is_null($row['darts_thrown']))
+                                        {{ $row['darts_thrown'] }}
+                                    @else
+                                        —
+                                    @endif
+                                </flux:table.cell>
+                            @endif
+                        </flux:table.row>
+                    @endforeach
+                </flux:table.rows>
+            </flux:table>
+        </div>
+    @endif
+
     <!-- Spielverlauf in voller Breite -->
     <div class="space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         <flux:heading size="md">{{ __('Spielverlauf') }}</flux:heading>
+        <flux:subheading>{{ __('Detaillierte Ansicht aller Legs mit vollständigen Statistiken') }}</flux:subheading>
 
         @if ($legs->isNotEmpty())
-            <div class="mt-4 space-y-6">
-                @foreach ($legs as $leg)
-                    <div class="rounded-lg border border-zinc-200 p-6 dark:border-zinc-700">
-                        <div class="mb-4 flex items-center justify-between">
-                            <div>
-                                <span class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                                    {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
-                                </span>
-                                @if ($leg->started_at || $leg->finished_at)
-                                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                        @if ($leg->started_at)
-                                            {{ __('Start:') }} {{ $leg->started_at->format('d.m.Y H:i:s') }}
-                                        @endif
-                                        @if ($leg->finished_at)
-                                            @if ($leg->started_at) · @endif
-                                            {{ __('Ende:') }} {{ $leg->finished_at->format('d.m.Y H:i:s') }}
-                                        @endif
-                                    </p>
-                                @endif
-                            </div>
-                            <flux:badge variant="{{ $leg->winner ? 'success' : 'subtle' }}">
-                                {{ $leg->winner?->name ?? __('Offen') }}
-                            </flux:badge>
-                        </div>
-
-                        @if ($leg->legPlayers->isNotEmpty())
-                            <div class="mb-6 overflow-x-auto">
-                                <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-700">
-                                    <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
-                                        <tr>
-                                            <th class="px-4 py-3 text-left">{{ __('Spieler') }}</th>
-                                            @if ($match->variant === 'X01')
-                                                <th class="px-4 py-3 text-right">{{ __('Average') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('Avg. bis 170') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('First 9 Avg.') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('Best Checkout') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('Checkout %') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('BUST') }}</th>
-                                            @elseif ($match->variant === 'Cricket')
-                                                <th class="px-4 py-3 text-right">{{ __('MPR') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('First 9 MPR') }}</th>
-                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
-                                            @else
-                                                <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
-                                            @endif
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
-                                        @foreach ($leg->legPlayers as $player)
-                                            <tr>
-                                                <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                                                    {{ $player->name }}
-                                                </td>
-                                                @if ($match->variant === 'X01')
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->average))
-                                                            {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->average_until_170))
-                                                            {{ number_format((float) $player->pivot->average_until_170, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->first_9_average))
-                                                            {{ number_format((float) $player->pivot->first_9_average, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->best_checkout_points))
-                                                            {{ $player->pivot->best_checkout_points }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->darts_thrown))
-                                                            {{ $player->pivot->darts_thrown }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->checkout_rate))
-                                                            {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
-                                                            @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
-                                                                ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
-                                                            @endif
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
-                                                            <span class="font-medium text-red-600 dark:text-red-400">{{ $player->pivot->busted_count }}</span>
-                                                        @else
-                                                            0
-                                                        @endif
-                                                    </td>
-                                                @elseif ($match->variant === 'Cricket')
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->mpr))
-                                                            {{ number_format((float) $player->pivot->mpr, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->first_9_mpr))
-                                                            {{ number_format((float) $player->pivot->first_9_mpr, 2, ',', '.') }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->darts_thrown))
-                                                            {{ $player->pivot->darts_thrown }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
-                                                @else
-                                                    <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                                                        @if (! is_null($player->pivot->darts_thrown))
-                                                            {{ $player->pivot->darts_thrown }}
-                                                        @else
-                                                            —
-                                                        @endif
-                                                    </td>
+            <div class="mt-4">
+                <flux:accordion transition>
+                    @foreach ($legs as $leg)
+                        <flux:accordion.item>
+                            <flux:accordion.heading>
+                                <div class="flex items-center justify-between w-full">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                                            {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
+                                        </span>
+                                        @if ($leg->started_at || $leg->finished_at)
+                                            <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                                                @if ($leg->started_at)
+                                                    {{ $leg->started_at->format('d.m.Y H:i') }}
                                                 @endif
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
+                                                @if ($leg->finished_at)
+                                                    @if ($leg->started_at) · @endif
+                                                    {{ $leg->finished_at->format('d.m.Y H:i') }}
+                                                @endif
+                                                @if ($leg->started_at && $leg->finished_at)
+                                                    @php
+                                                        $duration = $leg->started_at->diffForHumans($leg->finished_at, [
+                                                            'syntax' => \Carbon\CarbonInterface::DIFF_ABSOLUTE,
+                                                            'parts' => 2,
+                                                        ]);
+                                                    @endphp
+                                                    · <span class="font-medium">{{ __('Dauer: :duration', ['duration' => $duration]) }}</span>
+                                                @endif
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <flux:badge variant="{{ $leg->winner ? 'success' : 'subtle' }}" size="sm">
+                                        {{ $leg->winner?->name ?? __('Offen') }}
+                                    </flux:badge>
+                                </div>
+                            </flux:accordion.heading>
+                            <flux:accordion.content>
+                                <div class="pt-4 space-y-6">
+                                    @if ($leg->legPlayers->isNotEmpty())
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-700">
+                                                <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                                                    <tr>
+                                                        <th class="px-4 py-3 text-left">{{ __('Spieler') }}</th>
+                                                        @if ($match->variant === 'X01')
+                                                            <th class="px-4 py-3 text-right">{{ __('Average') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('Avg. bis 170') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('First 9 Avg.') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('Best Checkout') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('Checkout %') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('BUST') }}</th>
+                                                        @elseif ($match->variant === 'Cricket')
+                                                            <th class="px-4 py-3 text-right">{{ __('MPR') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('First 9 MPR') }}</th>
+                                                            <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
+                                                        @else
+                                                            <th class="px-4 py-3 text-right">{{ __('Pfeile') }}</th>
+                                                        @endif
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
+                                                    @foreach ($leg->legPlayers as $player)
+                                                        <tr>
+                                                            <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                                                                {{ $player->name }}
+                                                            </td>
+                                                            @if ($match->variant === 'X01')
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->average))
+                                                                        {{ number_format((float) $player->pivot->average, 2, ',', '.') }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->average_until_170))
+                                                                        {{ number_format((float) $player->pivot->average_until_170, 2, ',', '.') }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->first_9_average))
+                                                                        {{ number_format((float) $player->pivot->first_9_average, 2, ',', '.') }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->best_checkout_points))
+                                                                        {{ $player->pivot->best_checkout_points }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->darts_thrown))
+                                                                        {{ $player->pivot->darts_thrown }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->checkout_rate))
+                                                                        {{ number_format((float) $player->pivot->checkout_rate * 100, 2, ',', '.') }}%
+                                                                        @if (! is_null($player->pivot->checkout_hits) && ! is_null($player->pivot->checkout_attempts))
+                                                                            ({{ $player->pivot->checkout_hits }}/{{ $player->pivot->checkout_attempts }})
+                                                                        @endif
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->busted_count) && $player->pivot->busted_count > 0)
+                                                                        <span class="font-medium text-red-600 dark:text-red-400">{{ $player->pivot->busted_count }}</span>
+                                                                    @else
+                                                                        0
+                                                                    @endif
+                                                                </td>
+                                                            @elseif ($match->variant === 'Cricket')
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->mpr))
+                                                                        {{ number_format((float) $player->pivot->mpr, 2, ',', '.') }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->first_9_mpr))
+                                                                        {{ number_format((float) $player->pivot->first_9_mpr, 2, ',', '.') }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->darts_thrown))
+                                                                        {{ $player->pivot->darts_thrown }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                            @else
+                                                                <td class="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
+                                                                    @if (! is_null($player->pivot->darts_thrown))
+                                                                        {{ $player->pivot->darts_thrown }}
+                                                                    @else
+                                                                        —
+                                                                    @endif
+                                                                </td>
+                                                            @endif
+                                                        </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    @endif
 
-                        @include('livewire.matches.partials.chalkboard', ['leg' => $leg])
-                    </div>
-                @endforeach
+                                    @include('livewire.matches.partials.chalkboard', ['leg' => $leg])
+                                </div>
+                            </flux:accordion.content>
+                        </flux:accordion.item>
+                    @endforeach
+                </flux:accordion>
             </div>
         @else
             <p class="mt-4 text-sm text-zinc-500 dark:text-zinc-400">

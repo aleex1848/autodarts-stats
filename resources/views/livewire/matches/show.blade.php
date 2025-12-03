@@ -34,6 +34,10 @@ new class extends Component
 
     public int $maxSegmentCount = 0;
 
+    public ?string $sortBy = null;
+
+    public string $sortDirection = 'asc';
+
     protected array $boardOrder = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
     public function getListeners(): array
@@ -171,6 +175,66 @@ new class extends Component
         $this->loadTargetAnalysis();
     }
 
+    public function sort(string $column): void
+    {
+        if ($this->sortBy === $column) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortBy = $column;
+            $this->sortDirection = 'asc';
+        }
+    }
+
+    public function getSortedLegRows(): Collection
+    {
+        $rows = collect();
+
+        foreach ($this->legs as $leg) {
+            foreach ($leg->legPlayers as $player) {
+                $rows->push([
+                    'leg' => $leg,
+                    'player' => $player,
+                    'set_number' => $leg->set_number,
+                    'leg_number' => $leg->leg_number,
+                    'player_name' => $player->name,
+                    'winner' => $leg->winner && $leg->winner->id === $player->id,
+                    'average' => $player->pivot->average ?? null,
+                    'average_until_170' => $player->pivot->average_until_170 ?? null,
+                    'first_9_average' => $player->pivot->first_9_average ?? null,
+                    'best_checkout_points' => $player->pivot->best_checkout_points ?? null,
+                    'darts_thrown' => $player->pivot->darts_thrown ?? null,
+                    'checkout_rate' => $player->pivot->checkout_rate ? ($player->pivot->checkout_rate * 100) : null,
+                    'busted_count' => $player->pivot->busted_count ?? 0,
+                    'mpr' => $player->pivot->mpr ?? null,
+                    'first_9_mpr' => $player->pivot->first_9_mpr ?? null,
+                ]);
+            }
+        }
+
+        if ($this->sortBy) {
+            $rows = $rows->sortBy(function ($row) {
+                return match ($this->sortBy) {
+                    'set' => $row['set_number'],
+                    'leg' => $row['leg_number'],
+                    'player' => $row['player_name'],
+                    'winner' => $row['winner'] ? 1 : 0,
+                    'average' => $row['average'] ?? 0,
+                    'average_until_170' => $row['average_until_170'] ?? 0,
+                    'first_9_average' => $row['first_9_average'] ?? 0,
+                    'best_checkout' => $row['best_checkout_points'] ?? 0,
+                    'darts_thrown' => $row['darts_thrown'] ?? 0,
+                    'checkout_rate' => $row['checkout_rate'] ?? 0,
+                    'busted' => $row['busted_count'] ?? 0,
+                    'mpr' => $row['mpr'] ?? 0,
+                    'first_9_mpr' => $row['first_9_mpr'] ?? 0,
+                    default => 0,
+                };
+            }, SORT_REGULAR, $this->sortDirection === 'desc');
+        }
+
+        return $rows->values();
+    }
+
     public function with(): array
     {
         return [
@@ -183,6 +247,9 @@ new class extends Component
             'segmentOptions' => $this->segmentOptions,
             'maxSegmentCount' => $this->maxSegmentCount,
             'totalTargetThrows' => $this->totalTargetThrows,
+            'sortBy' => $this->sortBy,
+            'sortDirection' => $this->sortDirection,
+            'sortedLegRows' => $this->getSortedLegRows(),
         ];
     }
 
