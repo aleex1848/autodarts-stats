@@ -67,3 +67,4 @@ class SeasonPolicy
         return false;
     }
 }
+

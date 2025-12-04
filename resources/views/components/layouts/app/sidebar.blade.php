@@ -87,6 +87,33 @@
                         >
                             {{ __('Downloads') }}
                         </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="newspaper"
+                            :href="route('admin.news.platform.index')"
+                            :current="request()->routeIs('admin.news.platform.*')"
+                            wire:navigate
+                        >
+                            {{ __('Platform News') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="flag"
+                            :href="route('admin.news.leagues.index')"
+                            :current="request()->routeIs('admin.news.leagues.*')"
+                            wire:navigate
+                        >
+                            {{ __('Liga News') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="tag"
+                            :href="route('admin.news.categories.index')"
+                            :current="request()->routeIs('admin.news.categories.*')"
+                            wire:navigate
+                        >
+                            {{ __('News Kategorien') }}
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endhasanyrole
             </flux:navlist>

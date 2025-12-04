@@ -51,3 +51,4 @@ class SeasonParticipant extends Model
         return $this->belongsTo(Player::class);
     }
 }
+

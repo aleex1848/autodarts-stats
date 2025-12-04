@@ -150,6 +150,35 @@
                                 {{ __('Downloads') }}
                             </flux:navmenu.item>
 
+                            <flux:menu.separator />
+
+                            <flux:navmenu.item
+                                icon="newspaper"
+                                :href="route('admin.news.platform.index')"
+                                :current="request()->routeIs('admin.news.platform.*')"
+                                wire:navigate
+                            >
+                                {{ __('Platform News') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="flag"
+                                :href="route('admin.news.leagues.index')"
+                                :current="request()->routeIs('admin.news.leagues.*')"
+                                wire:navigate
+                            >
+                                {{ __('Liga News') }}
+                            </flux:navmenu.item>
+
+                            <flux:navmenu.item
+                                icon="tag"
+                                :href="route('admin.news.categories.index')"
+                                :current="request()->routeIs('admin.news.categories.*')"
+                                wire:navigate
+                            >
+                                {{ __('News Kategorien') }}
+                            </flux:navmenu.item>
+
                             <flux:navmenu.item
                                 icon="adjustments-vertical"
                                 :href="route('admin.page-settings.index')"
@@ -366,6 +395,33 @@
                             wire:navigate
                         >
                             {{ __('Downloads') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="newspaper"
+                            :href="route('admin.news.platform.index')"
+                            :current="request()->routeIs('admin.news.platform.*')"
+                            wire:navigate
+                        >
+                            {{ __('Platform News') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="flag"
+                            :href="route('admin.news.leagues.index')"
+                            :current="request()->routeIs('admin.news.leagues.*')"
+                            wire:navigate
+                        >
+                            {{ __('Liga News') }}
+                        </flux:navlist.item>
+
+                        <flux:navlist.item
+                            icon="tag"
+                            :href="route('admin.news.categories.index')"
+                            :current="request()->routeIs('admin.news.categories.*')"
+                            wire:navigate
+                        >
+                            {{ __('News Kategorien') }}
                         </flux:navlist.item>
 
                         <flux:navlist.item

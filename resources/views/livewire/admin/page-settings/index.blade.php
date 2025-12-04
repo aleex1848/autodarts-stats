@@ -16,6 +16,8 @@ new class extends Component
     public int $latestMatchesCount = 5;
     public int $runningMatchesCount = 5;
     public int $upcomingMatchesCount = 5;
+    public int $platformNewsCount = 5;
+    public int $leagueNewsCount = 5;
     
     // Header properties
     public ?int $editingHeaderId = null;
@@ -42,6 +44,8 @@ new class extends Component
         $this->latestMatchesCount = SettingsService::getLatestMatchesCount();
         $this->runningMatchesCount = SettingsService::getRunningMatchesCount();
         $this->upcomingMatchesCount = SettingsService::getUpcomingMatchesCount();
+        $this->platformNewsCount = SettingsService::getPlatformNewsCount();
+        $this->leagueNewsCount = SettingsService::getLeagueNewsCount();
     }
 
     public function with(): array
@@ -58,11 +62,15 @@ new class extends Component
             'latestMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
             'runningMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
             'upcomingMatchesCount' => ['required', 'integer', 'min:1', 'max:100'],
+            'platformNewsCount' => ['required', 'integer', 'min:1', 'max:100'],
+            'leagueNewsCount' => ['required', 'integer', 'min:1', 'max:100'],
         ]);
 
         SettingsService::setLatestMatchesCount($validated['latestMatchesCount']);
         SettingsService::setRunningMatchesCount($validated['runningMatchesCount']);
         SettingsService::setUpcomingMatchesCount($validated['upcomingMatchesCount']);
+        SettingsService::setPlatformNewsCount($validated['platformNewsCount']);
+        SettingsService::setLeagueNewsCount($validated['leagueNewsCount']);
 
         $this->dispatch('notify', title: __('Dashboard-Einstellungen gespeichert'));
     }
@@ -317,6 +325,29 @@ new class extends Component
                             max="100"
                             required
                         />
+                    </div>
+
+                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                        <flux:heading size="sm" class="mb-4">{{ __('News-Einstellungen') }}</flux:heading>
+                        <flux:subheading class="mb-4">{{ __('Konfiguriere die Anzahl der anzuzeigenden News im Dashboard') }}</flux:subheading>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <flux:input
+                                wire:model="platformNewsCount"
+                                type="number"
+                                :label="__('Anzahl Platform News')"
+                                min="1"
+                                max="100"
+                                required
+                            />
+                            <flux:input
+                                wire:model="leagueNewsCount"
+                                type="number"
+                                :label="__('Anzahl Liga News')"
+                                min="1"
+                                max="100"
+                                required
+                            />
+                        </div>
                     </div>
 
                     <div class="flex justify-end">

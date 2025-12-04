@@ -314,3 +314,4 @@ test('matchday isUpcoming returns false for unlimited modes', function () {
 
     expect($matchday->isUpcoming())->toBeFalse();
 });
+

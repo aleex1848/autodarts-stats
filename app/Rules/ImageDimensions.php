@@ -55,3 +55,4 @@ class ImageDimensions implements ValidationRule
         }
     }
 }
+

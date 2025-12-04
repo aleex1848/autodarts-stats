@@ -365,6 +365,15 @@ new class extends Component
 
         return [$leftTwo, $leftOne, $this->targetNumber, $rightOne, $rightTwo];
     }
+
+    public function isViewerAPlayer(): bool
+    {
+        if (! $this->playerId) {
+            return false;
+        }
+
+        return $this->match->players->contains('id', $this->playerId);
+    }
 }; ?>
 
 <div class="space-y-10">
@@ -411,7 +420,20 @@ new class extends Component
         </div>
     @endhasanyrole
 
-@if ($match->variant === 'X01')
+    @if ($match->fixture?->matchday?->season && ($match->fixture->matchday->season->isAdmin(Auth::user()) || $match->fixture->matchday->season->league->isAdmin(Auth::user())))
+        <div class="flex justify-end gap-2">
+            <flux:button
+                variant="primary"
+                icon="document-plus"
+                :href="route('seasons.show', $match->fixture->matchday->season) . '?activeTab=news&createNews=1&urlFixtureId=' . $match->fixture->id"
+                wire:navigate
+            >
+                {{ __('News erstellen') }}
+            </flux:button>
+        </div>
+    @endif
+
+@if ($match->variant === 'X01' && $this->isViewerAPlayer())
     <section class="w-full space-y-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>

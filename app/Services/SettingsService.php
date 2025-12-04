@@ -59,4 +59,40 @@ class SettingsService
     {
         Setting::set('dashboard.upcoming_matches_count', (string) $count);
     }
+
+    /**
+     * Get the number of platform news to display.
+     */
+    public static function getPlatformNewsCount(): int
+    {
+        $value = Setting::get('dashboard.platform_news_count', '5');
+
+        return (int) $value;
+    }
+
+    /**
+     * Set the number of platform news to display.
+     */
+    public static function setPlatformNewsCount(int $count): void
+    {
+        Setting::set('dashboard.platform_news_count', (string) $count);
+    }
+
+    /**
+     * Get the number of league news to display.
+     */
+    public static function getLeagueNewsCount(): int
+    {
+        $value = Setting::get('dashboard.league_news_count', '5');
+
+        return (int) $value;
+    }
+
+    /**
+     * Set the number of league news to display.
+     */
+    public static function setLeagueNewsCount(int $count): void
+    {
+        Setting::set('dashboard.league_news_count', (string) $count);
+    }
 }

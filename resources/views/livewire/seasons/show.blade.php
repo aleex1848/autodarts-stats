@@ -35,7 +35,7 @@ new class extends Component {
         $this->refreshStatus();        
         
         // Validate activeTab value
-        $validTabs = ['overview', 'schedule', 'standings', 'results'];
+        $validTabs = ['overview', 'schedule', 'standings', 'results', 'news'];
         if (!in_array($this->activeTab, $validTabs)) {
             $this->activeTab = 'overview';
         }
@@ -335,6 +335,15 @@ new class extends Component {
         >
             {{ __('Ergebnisse') }}
         </button>
+
+        @if ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user()))
+            <button
+                wire:click="$set('activeTab', 'news')"
+                class="px-4 py-2 text-sm font-medium transition-colors relative z-10 {{ $activeTab === 'news' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            >
+                {{ __('News') }}
+            </button>
+        @endif
     </div>
 
     @if ($activeTab === 'overview')
@@ -709,17 +718,30 @@ new class extends Component {
         <div class="space-y-4">
             @forelse ($matchdays as $matchday)
                 <div wire:key="matchday-{{ $matchday->id }}" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                    <div class="mb-4">
-                        <flux:heading size="md">
-                            {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
-                            @if ($matchday->is_return_round)
-                                <span class="text-sm font-normal text-zinc-500">({{ __('Rückrunde') }})</span>
+                    <div class="mb-4 flex items-start justify-between gap-4">
+                        <div>
+                            <flux:heading size="md">
+                                {{ __('Spieltag :number', ['number' => $matchday->matchday_number]) }}
+                                @if ($matchday->is_return_round)
+                                    <span class="text-sm font-normal text-zinc-500">({{ __('Rückrunde') }})</span>
+                                @endif
+                            </flux:heading>
+                            @if ($matchday->deadline_at)
+                                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Deadline: :date', ['date' => $matchday->deadline_at->format('d.m.Y')]) }}
+                                </p>
                             @endif
-                        </flux:heading>
-                        @if ($matchday->deadline_at)
-                            <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Deadline: :date', ['date' => $matchday->deadline_at->format('d.m.Y')]) }}
-                            </p>
+                        </div>
+                        @if ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user()))
+                            <flux:button
+                                size="sm"
+                                variant="outline"
+                                icon="document-plus"
+                                :href="route('seasons.show', $season) . '?activeTab=news&createNews=1&urlMatchdayId=' . $matchday->id"
+                                wire:navigate
+                            >
+                                {{ __('News erstellen') }}
+                            </flux:button>
                         @endif
                     </div>
 
@@ -1031,5 +1053,9 @@ new class extends Component {
                 </div>
             </flux:modal>
         @endif
+    @endif
+
+    @if ($activeTab === 'news' && ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user())))
+        <livewire:seasons.news :season="$season" />
     @endif
 </section>

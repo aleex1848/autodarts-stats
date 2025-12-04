@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolePermissionSeeder::class);
+        $this->call(NewsCategorySeeder::class);
 
         $player = User::firstOrCreate(
             ['email' => 'player@example.com'],

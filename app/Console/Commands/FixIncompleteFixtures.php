@@ -70,3 +70,4 @@ class FixIncompleteFixtures extends Command
         return Command::SUCCESS;
     }
 }
+

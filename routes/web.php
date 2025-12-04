@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\DiscordController;
 use App\Models\DartMatch;
 use App\Models\Download;
 use App\Models\League;
+use App\Models\News;
 use App\Models\Season;
 use App\Models\User;
 use App\Services\MatchExportService;
@@ -27,6 +28,7 @@ Route::get('/auth/discord/callback', [DiscordController::class, 'callback'])->na
 
 Route::model('match', DartMatch::class);
 Route::model('league', League::class);
+Route::model('news', News::class);
 Route::model('season', Season::class);
 Route::model('download', Download::class);
 Route::model('user', User::class);
@@ -69,6 +71,13 @@ Route::middleware(['auth', 'verified'])
             ->name('seasons.show');
 
         Volt::route('users/{user}', 'users.show')->name('users.show');
+
+        // News routes
+        Volt::route('news/{news}', 'news.show')
+            ->middleware('can:view,news')
+            ->name('news.show');
+        Volt::route('news/platform', 'news.platform')->name('news.platform');
+        Volt::route('news/leagues', 'news.leagues')->name('news.leagues');
 
         // Export route (only for admins)
         Route::get('matches/{match}/export', function (DartMatch $match, MatchExportService $exportService) {
@@ -183,6 +192,12 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
 
         // Download categories routes
         Volt::route('admin/download-categories', 'admin.download-categories.index')->name('download-categories.index');
+        
+        // News routes
+        Volt::route('admin/news/categories', 'admin.news.categories.index')->name('news.categories.index');
+        Volt::route('admin/news/platform', 'admin.news.platform.index')->name('news.platform.index');
+        Volt::route('admin/news/leagues', 'admin.news.leagues.index')->name('news.leagues.index');
+        
         Volt::route('admin/page-settings', 'admin.page-settings.index')->name('page-settings.index');
         Volt::route('admin/page-settings/scheduler', 'admin.page-settings.scheduler')->name('page-settings.scheduler');
     });

@@ -79,6 +79,15 @@ new class extends Component {
         >
             {{ __('Saisons') }} ({{ $seasons->count() }})
         </button>
+
+        @if ($league->isAdmin(Auth::user()))
+            <button
+                wire:click="$set('activeTab', 'news')"
+                class="px-4 py-2 text-sm font-medium transition-colors {{ $activeTab === 'news' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100' }}"
+            >
+                {{ __('News') }}
+            </button>
+        @endif
     </div>
 
     @if ($activeTab === 'overview')
@@ -157,5 +166,9 @@ new class extends Component {
                 </flux:callout>
             @endif
         </div>
+    @endif
+
+    @if ($activeTab === 'news' && $league->isAdmin(Auth::user()))
+        <livewire:leagues.news :league="$league" />
     @endif
 </section>
