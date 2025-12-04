@@ -505,7 +505,7 @@ new class extends Component
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center gap-2 mb-2">
                                         <a href="{{ route('news.show', $item) }}" wire:navigate class="hover:underline">
-                                            <h4 class="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-700 dark:text-neutral-100 dark:group-hover:text-neutral-300">
+                                            <h4 class="break-words text-sm font-medium text-neutral-900 group-hover:text-neutral-700 dark:text-neutral-100 dark:group-hover:text-neutral-300">
                                                 {{ $item->title }}
                                             </h4>
                                         </a>
