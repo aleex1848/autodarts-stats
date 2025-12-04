@@ -36,7 +36,8 @@ new class extends Component {
             'matchdays.fixtures.dartMatch',
             'matchdays.news' => function ($query) use ($season) {
                 $query->where('season_id', $season->id)
-                    ->where('is_published', true);
+                    ->where('is_published', true)
+                    ->whereNull('matchday_fixture_id'); // Nur Spieltags-News, keine Fixture-News
             },
             'matchdays.fixtures.news' => function ($query) use ($season) {
                 $query->where('season_id', $season->id)
@@ -821,7 +822,8 @@ new class extends Component {
                         @if ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user()))
                             <div class="flex gap-2">
                                 @php
-                                    $matchdayNews = $matchday->news->first();
+                                    // Prüfe nur News, die speziell für den Spieltag sind (ohne Fixture)
+                                    $matchdayNews = $matchday->news->firstWhere('matchday_fixture_id', null);
                                 @endphp
                                 @if ($matchdayNews)
                                     <flux:button

@@ -451,87 +451,91 @@ new class extends Component
     }
 }; ?>
 
-<div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <flux:heading size="lg">{{ __('Season News') }}</flux:heading>
-            <flux:subheading>{{ __('Verwalte News für diese Season') }}</flux:subheading>
+<div class="relative h-full overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-zinc-900">
+    <div class="flex h-full flex-col">
+        <div class="border-b border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-700 dark:bg-zinc-800">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{{ __('Season News') }}</h3>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{{ __('Verwalte News für diese Season') }}</p>
+                </div>
+
+                <div class="flex gap-2">
+                    <flux:button icon="plus" variant="primary" wire:click="openCreateModal" size="sm">
+                        {{ __('News erstellen') }}
+                    </flux:button>
+                    <flux:button 
+                        icon="sparkles" 
+                        variant="outline" 
+                        wire:click="openCreateModal"
+                        wire:loading.attr="disabled"
+                        wire:target="generateAIMatchReport,generateAIMatchdayReport"
+                        size="sm"
+                    >
+                        <span wire:loading.remove wire:target="generateAIMatchReport,generateAIMatchdayReport">
+                            {{ __('KI News erstellen') }}
+                        </span>
+                        <span wire:loading wire:target="generateAIMatchReport,generateAIMatchdayReport">
+                            {{ __('Generiere...') }}
+                        </span>
+                    </flux:button>
+                </div>
+            </div>
         </div>
 
-        <div class="flex gap-2">
-            <flux:button icon="plus" variant="primary" wire:click="openCreateModal">
-                {{ __('News erstellen') }}
-            </flux:button>
-            <flux:button 
-                icon="sparkles" 
-                variant="outline" 
-                wire:click="openCreateModal"
-                wire:loading.attr="disabled"
-                wire:target="generateAIMatchReport,generateAIMatchdayReport"
-            >
-                <span wire:loading.remove wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                    {{ __('KI News erstellen') }}
-                </span>
-                <span wire:loading wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                    {{ __('Generiere...') }}
-                </span>
-            </flux:button>
-        </div>
-    </div>
+        <div class="flex-1 overflow-y-auto p-6">
+            <div class="mb-4">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    icon="magnifying-glass"
+                    :placeholder="__('News durchsuchen...')"
+                />
+            </div>
 
-    <div class="space-y-4">
-        <flux:input
-            wire:model.live.debounce.300ms="search"
-            icon="magnifying-glass"
-            :placeholder="__('News durchsuchen...')"
-        />
+            <div class="space-y-4">
+                @forelse ($news as $item)
+                    <div
+                        class="group rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-zinc-800"
+                        wire:key="news-{{ $item->id }}"
+                    >
+                        <div class="p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-zinc-700">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <a href="{{ route('news.show', $item) }}" wire:navigate class="hover:underline">
+                                            <h4 class="truncate text-sm font-medium text-neutral-900 group-hover:text-neutral-700 dark:text-neutral-100 dark:group-hover:text-neutral-300">
+                                                {{ $item->title }}
+                                            </h4>
+                                        </a>
+                                    </div>
 
-        <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-            <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
-                <thead class="bg-zinc-50 dark:bg-zinc-800">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                            {{ __('Titel') }}
-                        </th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                            {{ __('Kategorie') }}
-                        </th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                            {{ __('Status') }}
-                        </th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                            {{ __('Aktionen') }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    @forelse ($news as $item)
-                        <tr wire:key="news-{{ $item->id }}">
-                            <td class="px-4 py-3 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                <a href="{{ route('news.show', $item) }}" wire:navigate class="hover:underline">
-                                    {{ $item->title }}
-                                </a>
-                            </td>
-                            <td class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
-                                @if ($item->category)
-                                    <flux:badge size="sm" variant="subtle">{{ $item->category->name }}</flux:badge>
-                                @else
-                                    <span class="text-zinc-400">{{ __('Keine Kategorie') }}</span>
-                                @endif
-                            </td>
-                            <td class="px-4 py-3 text-sm">
-                                @if ($item->is_published)
-                                    <flux:badge size="sm" variant="success">{{ __('Veröffentlicht') }}</flux:badge>
-                                @else
-                                    <flux:badge size="sm" variant="danger">{{ __('Entwurf') }}</flux:badge>
-                                @endif
-                            </td>
-                            <td class="px-4 py-3 text-right text-sm">
-                                <div class="flex justify-end gap-2">
+                                    <div class="flex flex-wrap items-center gap-2 mb-2">
+                                        @if ($item->category)
+                                            <flux:badge size="xs" variant="subtle">{{ $item->category->name }}</flux:badge>
+                                        @endif
+                                        @if ($item->is_published)
+                                            <flux:badge size="xs" variant="success">{{ __('Veröffentlicht') }}</flux:badge>
+                                        @else
+                                            <flux:badge size="xs" variant="danger">{{ __('Entwurf') }}</flux:badge>
+                                        @endif
+                                    </div>
+
+                                    @if ($item->excerpt)
+                                        <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2">
+                                            {{ $item->excerpt }}
+                                        </p>
+                                    @endif
+
+                                    <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                        @if ($item->created_at)
+                                            {{ $item->created_at->diffForHumans() }}
+                                        @endif
+                                    </p>
+                                </div>
+                                <div class="shrink-0 flex gap-2">
                                     <flux:button size="xs" variant="outline" wire:click="editNews({{ $item->id }})">
                                         {{ __('Bearbeiten') }}
                                     </flux:button>
-
                                     <flux:button
                                         size="xs"
                                         variant="danger"
@@ -540,21 +544,19 @@ new class extends Component
                                         {{ __('Löschen') }}
                                     </flux:button>
                                 </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="4" class="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Keine News vorhanden.') }}
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                            </div>
+                        </div>
+                    </div>
+                @empty
+                    <div class="py-8 text-center">
+                        <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ __('Keine News vorhanden.') }}</p>
+                    </div>
+                @endforelse
+            </div>
 
-        <div>
-            {{ $news->links() }}
+            <div class="mt-4">
+                {{ $news->links() }}
+            </div>
         </div>
     </div>
 

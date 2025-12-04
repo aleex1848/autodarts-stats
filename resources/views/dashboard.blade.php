@@ -32,13 +32,9 @@
             <livewire:matches.upcoming />
         </div>
 
-        {{-- Untere 3er Grid: Downloads --}}
+        {{-- Untere 3er Grid: Downloads und News --}}
         <div class="grid auto-rows-min gap-4 md:grid-cols-3">
             <x-downloads.latest />
-        </div>
-
-        {{-- News Grid: Platform News und Liga News --}}
-        <div class="grid auto-rows-min gap-4 md:grid-cols-2">
             <livewire:news.platform-news />
             <livewire:news.league-news />
         </div>
