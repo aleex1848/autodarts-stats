@@ -4,12 +4,14 @@ use App\Models\League;
 use App\Models\Season;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new class extends Component {
     #[Locked]
     public League $league;
 
+    #[Url(as: 'activeTab')]
     public string $activeTab = 'overview';
 
     public function mount(League $league): void
@@ -19,6 +21,12 @@ new class extends Component {
             'coAdmins',
             'seasons',
         ]);
+
+        // Validate activeTab value
+        $validTabs = ['overview', 'seasons'];
+        if (!in_array($this->activeTab, $validTabs)) {
+            $this->activeTab = 'overview';
+        }
     }
 
     public function with(): array

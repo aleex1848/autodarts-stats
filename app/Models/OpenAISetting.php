@@ -17,6 +17,7 @@ class OpenAISetting extends Model
         'max_completion_tokens',
         'match_prompt',
         'matchday_prompt',
+        'season_prompt',
     ];
 
     protected function casts(): array
@@ -65,12 +66,28 @@ class OpenAISetting extends Model
         $defaultMatchdayPrompt .= "Erwähne Überraschungssieger, wichtige Tabellenänderungen und besondere Vorkommnisse. ";
         $defaultMatchdayPrompt .= "Der Artikel soll zwischen 400 und 600 Wörtern lang sein und auf Deutsch verfasst werden.";
 
+        $defaultSeasonPrompt = "Schreibe einen spannenden, sportjournalistischen Saisonbericht für eine Dart-Saison.\n\n";
+        $defaultSeasonPrompt .= "Saison-Informationen:\n";
+        $defaultSeasonPrompt .= "- Liga: {league_name}\n";
+        $defaultSeasonPrompt .= "- Saison: {season_name}\n";
+        $defaultSeasonPrompt .= "- Gesamtspieltage: {total_matchdays}\n";
+        $defaultSeasonPrompt .= "- Abgeschlossene Spieltage: {completed_matchdays}\n\n";
+        $defaultSeasonPrompt .= "Saisonergebnisse:\n";
+        $defaultSeasonPrompt .= "{season_results}\n\n";
+        $defaultSeasonPrompt .= "{final_standings}\n\n";
+        $defaultSeasonPrompt .= "{highlights}\n\n";
+        $defaultSeasonPrompt .= "{champion}\n\n";
+        $defaultSeasonPrompt .= "Schreibe einen spannenden, sportjournalistischen Artikel über die gesamte Saison. ";
+        $defaultSeasonPrompt .= "Erwähne den Saisonverlauf, wichtige Wendepunkte, Überraschungen und die Entwicklung der Tabelle. ";
+        $defaultSeasonPrompt .= "Der Artikel soll zwischen 500 und 800 Wörtern lang sein und auf Deutsch verfasst werden.";
+
         return static::firstOrCreate([], [
             'model' => config('openai.default_model', 'o1-preview'),
             'max_tokens' => config('openai.max_tokens', 2000),
             'max_completion_tokens' => config('openai.max_completion_tokens', 4000),
             'match_prompt' => $defaultMatchPrompt,
             'matchday_prompt' => $defaultMatchdayPrompt,
+            'season_prompt' => $defaultSeasonPrompt,
         ]);
     }
 }

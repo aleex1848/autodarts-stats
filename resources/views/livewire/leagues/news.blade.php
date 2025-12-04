@@ -466,21 +466,6 @@ new class extends Component
                     <flux:button icon="plus" variant="primary" wire:click="openCreateModal" size="sm">
                         {{ __('News erstellen') }}
                     </flux:button>
-                    <flux:button 
-                        icon="sparkles" 
-                        variant="outline" 
-                        wire:click="openCreateModal"
-                        wire:loading.attr="disabled"
-                        wire:target="generateAIMatchReport,generateAIMatchdayReport"
-                        size="sm"
-                    >
-                        <span wire:loading.remove wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                            {{ __('KI News erstellen') }}
-                        </span>
-                        <span wire:loading wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                            {{ __('Generiere...') }}
-                        </span>
-                    </flux:button>
                 </div>
             </div>
         </div>

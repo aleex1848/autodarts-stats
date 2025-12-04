@@ -36,6 +36,16 @@ class OpenAIService
         return $this->callOpenAI($prompt, $model);
     }
 
+    public function generateSeasonReport(\App\Models\Season $season): string
+    {
+        $data = $this->extractSeasonData($season);
+        $model = $this->getModel();
+
+        $prompt = $this->buildSeasonReportPrompt($data);
+
+        return $this->callOpenAI($prompt, $model);
+    }
+
     public function getModel(): string
     {
         // Get model from database settings or use default
@@ -339,6 +349,182 @@ class OpenAIService
         return $prompt;
     }
 
+    protected function extractSeasonData(\App\Models\Season $season): array
+    {
+        $season->load([
+            'league',
+            'matchdays.fixtures.homePlayer',
+            'matchdays.fixtures.awayPlayer',
+            'matchdays.fixtures.dartMatch.matchPlayers.player',
+        ]);
+
+        $matchdays = $season->matchdays()->orderBy('matchday_number')->get();
+        $completedMatchdays = $matchdays->filter(function ($matchday) {
+            return $matchday->fixtures()->where('status', \App\Enums\FixtureStatus::Completed->value)->exists();
+        });
+
+        // Get all season results
+        $seasonResults = [];
+        $highlights = [];
+
+        foreach ($matchdays as $matchday) {
+            $fixtures = $matchday->fixtures()
+                ->where('status', \App\Enums\FixtureStatus::Completed->value)
+                ->with(['homePlayer', 'awayPlayer', 'dartMatch.matchPlayers.player'])
+                ->get();
+
+            foreach ($fixtures as $fixture) {
+                $homePlayer = $fixture->homePlayer;
+                $awayPlayer = $fixture->awayPlayer;
+                $winner = $fixture->winner;
+
+                $seasonResults[] = [
+                    'matchday_number' => $matchday->matchday_number,
+                    'home_player' => $homePlayer?->name ?? 'Unbekannt',
+                    'away_player' => $awayPlayer?->name ?? 'Unbekannt',
+                    'home_legs_won' => $fixture->home_legs_won ?? 0,
+                    'away_legs_won' => $fixture->away_legs_won ?? 0,
+                    'winner' => $winner?->name ?? 'Unbekannt',
+                ];
+
+                // Collect highlights
+                if ($fixture->dartMatch) {
+                    $matchPlayers = $fixture->dartMatch->matchPlayers()->with('player')->get();
+                    foreach ($matchPlayers as $matchPlayer) {
+                        if (($matchPlayer->best_checkout_points ?? 0) >= 100) {
+                            $highlights[] = [
+                                'type' => 'high_checkout',
+                                'matchday' => $matchday->matchday_number,
+                                'match' => "{$homePlayer?->name} vs {$awayPlayer?->name}",
+                                'player' => $matchPlayer->player->name,
+                                'value' => $matchPlayer->best_checkout_points,
+                                'description' => "High Finish von {$matchPlayer->best_checkout_points} Punkten",
+                            ];
+                        }
+                        if (($matchPlayer->total_180s ?? 0) >= 3) {
+                            $highlights[] = [
+                                'type' => 'many_180s',
+                                'matchday' => $matchday->matchday_number,
+                                'match' => "{$homePlayer?->name} vs {$awayPlayer?->name}",
+                                'player' => $matchPlayer->player->name,
+                                'value' => $matchPlayer->total_180s,
+                                'description' => "{$matchPlayer->total_180s} x 180 geworfen",
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get final standings
+        $standingsCalculator = app(\App\Services\LeagueStandingsCalculator::class);
+        $finalStandings = $standingsCalculator->calculateStandings($season);
+
+        // Find champion
+        $champion = null;
+        if ($finalStandings->isNotEmpty()) {
+            $champion = $finalStandings->first()->player?->name ?? 'Unbekannt';
+        }
+
+        return [
+            'season_info' => [
+                'league_name' => $season->league->name,
+                'season_name' => $season->name,
+                'total_matchdays' => $matchdays->count(),
+                'completed_matchdays' => $completedMatchdays->count(),
+            ],
+            'season_results' => $seasonResults,
+            'final_standings' => $finalStandings,
+            'highlights' => $highlights,
+            'champion' => $champion,
+        ];
+    }
+
+    protected function buildSeasonReportPrompt(array $data): string
+    {
+        $seasonInfo = $data['season_info'];
+        $seasonResults = $data['season_results'];
+        $finalStandings = $data['final_standings'];
+        $highlights = $data['highlights'];
+        $champion = $data['champion'];
+
+        // Get prompt template from database or use default
+        $settings = \App\Models\OpenAISetting::getCurrent();
+        $promptTemplate = $settings->season_prompt;
+
+        // If no template in DB, use default
+        if (empty($promptTemplate)) {
+            $promptTemplate = "Schreibe einen spannenden, sportjournalistischen Saisonbericht für eine Dart-Saison.\n\n";
+            $promptTemplate .= "Saison-Informationen:\n";
+            $promptTemplate .= "- Liga: {league_name}\n";
+            $promptTemplate .= "- Saison: {season_name}\n";
+            $promptTemplate .= "- Gesamtspieltage: {total_matchdays}\n";
+            $promptTemplate .= "- Abgeschlossene Spieltage: {completed_matchdays}\n\n";
+            $promptTemplate .= "Saisonergebnisse:\n";
+            $promptTemplate .= "{season_results}\n\n";
+            $promptTemplate .= "{final_standings}\n\n";
+            $promptTemplate .= "{highlights}\n\n";
+            $promptTemplate .= "{champion}\n\n";
+            $promptTemplate .= "Schreibe einen spannenden, sportjournalistischen Artikel über die gesamte Saison. ";
+            $promptTemplate .= "Erwähne den Saisonverlauf, wichtige Wendepunkte, Überraschungen und die Entwicklung der Tabelle. ";
+            $promptTemplate .= "Der Artikel soll zwischen 500 und 800 Wörtern lang sein und auf Deutsch verfasst werden.";
+        }
+
+        // Build season results text
+        $seasonResultsText = '';
+        $currentMatchday = null;
+        foreach ($seasonResults as $result) {
+            if ($currentMatchday !== $result['matchday_number']) {
+                if ($currentMatchday !== null) {
+                    $seasonResultsText .= "\n";
+                }
+                $seasonResultsText .= "Spieltag {$result['matchday_number']}:\n";
+                $currentMatchday = $result['matchday_number'];
+            }
+            $seasonResultsText .= "- {$result['home_player']} vs {$result['away_player']}: ";
+            $seasonResultsText .= "{$result['home_legs_won']}:{$result['away_legs_won']} ";
+            $seasonResultsText .= "(Gewinner: {$result['winner']})\n";
+        }
+
+        // Build final standings text
+        $finalStandingsText = "\nEndtabelle:\n";
+        foreach ($finalStandings as $index => $participant) {
+            $position = $index + 1;
+            $playerName = $participant->player?->name ?? 'Unbekannt';
+            $finalStandingsText .= "{$position}. {$playerName}: ";
+            $finalStandingsText .= "{$participant->points} Punkte, ";
+            $finalStandingsText .= "{$participant->legs_won}:{$participant->legs_lost} Legs\n";
+        }
+
+        // Build highlights text
+        $highlightsText = '';
+        if (!empty($highlights)) {
+            $highlightsText = "\nHighlights der Saison:\n";
+            foreach ($highlights as $highlight) {
+                $highlightsText .= "- {$highlight['description']} ";
+                $highlightsText .= "({$highlight['player']} in Spieltag {$highlight['matchday']}: {$highlight['match']})\n";
+            }
+        }
+
+        // Build champion text
+        $championText = '';
+        if ($champion) {
+            $championText = "\nSaisonmeister: {$champion}\n";
+        }
+
+        // Replace placeholders
+        $prompt = str_replace('{league_name}', $seasonInfo['league_name'], $promptTemplate);
+        $prompt = str_replace('{season_name}', $seasonInfo['season_name'], $prompt);
+        $prompt = str_replace('{total_matchdays}', (string) $seasonInfo['total_matchdays'], $prompt);
+        $prompt = str_replace('{completed_matchdays}', (string) $seasonInfo['completed_matchdays'], $prompt);
+        $prompt = str_replace('{season_results}', $seasonResultsText, $prompt);
+        $prompt = str_replace('{final_standings}', $finalStandingsText, $prompt);
+        $prompt = str_replace('{highlights}', $highlightsText, $prompt);
+        $prompt = str_replace('{champion}', $championText, $prompt);
+
+        return $prompt;
+    }
+
     protected function callOpenAI(string $prompt, string $model): string
     {
         $apiKey = config('openai.api_key');
@@ -417,12 +603,27 @@ class OpenAIService
             }
 
             if ($response->failed()) {
+                $errorBody = $response->json();
+                $errorMessage = 'OpenAI API Fehler';
+                
+                // Extract error message from response
+                if (isset($errorBody['error']['message'])) {
+                    $errorMessage = $errorBody['error']['message'];
+                } elseif (isset($errorBody['error']['type'])) {
+                    $errorMessage = $errorBody['error']['type'] . ': ' . ($errorBody['error']['message'] ?? 'Unbekannter Fehler');
+                } elseif (is_string($errorBody)) {
+                    $errorMessage = $errorBody;
+                } else {
+                    $errorMessage = 'OpenAI API Fehler: ' . json_encode($errorBody);
+                }
+
                 Log::error('OpenAI API Error', [
                     'status' => $response->status(),
                     'body' => $response->body(),
+                    'error_message' => $errorMessage,
                 ]);
 
-                throw new \Exception('OpenAI API Fehler: ' . $response->body());
+                throw new \Exception($errorMessage);
             }
 
             $data = $response->json();
@@ -467,6 +668,9 @@ class OpenAIService
                 $usage = $data['usage'] ?? [];
                 $reasoningTokens = $usage['completion_tokens_details']['reasoning_tokens'] ?? 0;
                 $completionTokens = $usage['completion_tokens'] ?? 0;
+                $maxTokens = $this->modelUsesMaxCompletionTokens($model) 
+                    ? $this->getMaxCompletionTokens() 
+                    : $this->getMaxTokens();
                 
                 Log::warning('OpenAI API: Response was truncated due to length', [
                     'model' => $model,
@@ -474,11 +678,24 @@ class OpenAIService
                     'reasoning_tokens' => $reasoningTokens,
                     'completion_tokens' => $completionTokens,
                     'total_completion_tokens' => $usage['completion_tokens'] ?? 0,
+                    'max_tokens' => $maxTokens,
                 ]);
                 
                 // If content is empty but we have reasoning tokens, the model might need more tokens
                 if (empty($content) && $reasoningTokens > 0) {
-                    throw new \Exception('Das Modell hat alle Tokens für interne Überlegungen verwendet, bevor der Inhalt generiert wurde. Bitte erhöhen Sie max_completion_tokens oder wählen Sie ein anderes Modell.');
+                    throw new \Exception("Das Modell hat alle Tokens für interne Überlegungen verwendet ({$reasoningTokens} reasoning tokens von {$maxTokens} max tokens), bevor der Inhalt generiert wurde. Bitte erhöhen Sie max_completion_tokens in den OpenAI-Einstellungen oder wählen Sie ein anderes Modell.");
+                }
+                
+                // If content exists but was truncated, warn the user but don't throw - return partial content
+                if (!empty($content)) {
+                    Log::warning('OpenAI API: Content was truncated but returning partial content', [
+                        'model' => $model,
+                        'content_length' => strlen($content),
+                        'completion_tokens' => $completionTokens,
+                        'max_tokens' => $maxTokens,
+                    ]);
+                    // Don't throw here - return the partial content with a warning
+                    // The user will see the truncated content
                 }
             } elseif ($finishReason === 'content_filter') {
                 Log::error('OpenAI API: Response was filtered', [

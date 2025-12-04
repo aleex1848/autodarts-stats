@@ -11,6 +11,7 @@ new class extends Component
     public int $maxCompletionTokens = 4000;
     public string $matchPrompt = '';
     public string $matchdayPrompt = '';
+    public string $seasonPrompt = '';
     public array $availableModels = [];
     public bool $isLoadingModels = false;
     public ?string $modelsError = null;
@@ -23,6 +24,7 @@ new class extends Component
         $this->maxCompletionTokens = $settings->max_completion_tokens ?? 4000;
         $this->matchPrompt = $settings->match_prompt ?? '';
         $this->matchdayPrompt = $settings->matchday_prompt ?? '';
+        $this->seasonPrompt = $settings->season_prompt ?? '';
         $this->loadAvailableModels();
     }
 
@@ -53,6 +55,7 @@ new class extends Component
             'maxCompletionTokens' => ['required', 'integer', 'min:100', 'max:32000'],
             'matchPrompt' => ['required', 'string', 'min:50'],
             'matchdayPrompt' => ['required', 'string', 'min:50'],
+            'seasonPrompt' => ['required', 'string', 'min:50'],
         ];
     }
 
@@ -67,6 +70,7 @@ new class extends Component
             'max_completion_tokens' => $validated['maxCompletionTokens'],
             'match_prompt' => $validated['matchPrompt'],
             'matchday_prompt' => $validated['matchdayPrompt'],
+            'season_prompt' => $validated['seasonPrompt'],
         ]);
 
         $this->dispatch('notify', title: __('OpenAI-Einstellungen gespeichert'));
@@ -160,6 +164,16 @@ new class extends Component
                 />
                 <flux:description>
                     {{ __('Der Prompt-Template für die Generierung von Spieltagsberichten. Verfügbare Platzhalter: {league_name}, {season_name}, {matchday_number}, {total_fixtures}, {completed_fixtures}, {match_results}, {highlights}, {table_changes}') }}
+                </flux:description>
+
+                <flux:textarea
+                    wire:model="seasonPrompt"
+                    :label="__('Prompt für Saisonberichte')"
+                    rows="15"
+                    required
+                />
+                <flux:description>
+                    {{ __('Der Prompt-Template für die Generierung von Saisonberichten. Verfügbare Platzhalter: {league_name}, {season_name}, {total_matchdays}, {completed_matchdays}, {season_results}, {final_standings}, {highlights}, {champion}') }}
                 </flux:description>
 
                 <div class="flex justify-end gap-2">

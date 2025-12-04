@@ -156,6 +156,8 @@ new class extends Component
                     $rules['matchdayId'] = ['nullable', 'exists:matchdays,id'];
                 } elseif ($category->slug === 'spielberichte') {
                     $rules['matchdayFixtureId'] = ['nullable', 'exists:matchday_fixtures,id'];
+                } elseif ($category->slug === 'saisonbericht') {
+                    // Saisonbericht benötigt keine matchday_id oder matchday_fixture_id
                 }
             }
         } else {
@@ -310,6 +312,34 @@ new class extends Component
         return $category && $category->slug === 'spielberichte';
     }
 
+    protected function shouldShowSeasonField(): bool
+    {
+        if (! $this->categoryId) {
+            return false;
+        }
+
+        $category = NewsCategory::find($this->categoryId);
+        return $category && $category->slug === 'saisonbericht';
+    }
+
+    protected function canCreateSeasonNews(): bool
+    {
+        // Prüfe ob die Kategorie existiert
+        $saisonberichtCategory = NewsCategory::where('slug', 'saisonbericht')->first();
+        if (! $saisonberichtCategory) {
+            return false;
+        }
+
+        // Prüfe ob bereits eine Season-News mit dieser Kategorie existiert
+        $existingSeasonNews = News::query()
+            ->where('season_id', $this->season->id)
+            ->where('category_id', $saisonberichtCategory->id)
+            ->exists();
+
+        // Button nur anzeigen, wenn noch keine Season-News existiert
+        return ! $existingSeasonNews;
+    }
+
     public function generateAIMatchReport(int $fixtureId): void
     {
         $this->authorize('create', News::class, 'league');
@@ -414,6 +444,65 @@ new class extends Component
         }
     }
 
+    public function generateAISeasonReport(): void
+    {
+        $this->authorize('create', News::class, 'league');
+
+        $this->isGeneratingAI = true;
+        $this->aiGenerationError = null;
+
+        try {
+            $openAIService = app(OpenAIService::class);
+            $content = $openAIService->generateSeasonReport($this->season);
+
+            // Validate content is not empty
+            if (empty(trim($content))) {
+                throw new \Exception('Die OpenAI API hat keinen Inhalt zurückgegeben. Bitte versuchen Sie es erneut oder wählen Sie ein anderes Modell.');
+            }
+
+            // Extract title from content
+            $title = $this->extractTitleFromContent($content);
+            $excerpt = $this->extractExcerptFromContent($content);
+
+            // Get category
+            $saisonberichtCategory = NewsCategory::where('slug', 'saisonbericht')->first();
+
+            // Create news
+            $news = News::create([
+                'type' => 'league',
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'content' => $content,
+                'excerpt' => $excerpt,
+                'league_id' => $this->season->league_id,
+                'season_id' => $this->season->id,
+                'category_id' => $saisonberichtCategory?->id,
+                'is_published' => true,
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            $this->dispatch('notify', title: __('KI-News erfolgreich erstellt'));
+        } catch (\Throwable $e) {
+            $errorMessage = $e->getMessage();
+            $this->aiGenerationError = $errorMessage;
+            
+            // Log the error for debugging
+            \Illuminate\Support\Facades\Log::error('Error generating AI season report', [
+                'error' => $errorMessage,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            // Dispatch notification
+            $this->dispatch('notify', 
+                title: __('Fehler bei der KI-Generierung'), 
+                description: $errorMessage, 
+                variant: 'danger'
+            );
+        } finally {
+            $this->isGeneratingAI = false;
+        }
+    }
+
     protected function extractTitleFromContent(string $content): string
     {
         // Try to extract title from first line or first sentence
@@ -464,26 +553,44 @@ new class extends Component
                     <flux:button icon="plus" variant="primary" wire:click="openCreateModal" size="sm">
                         {{ __('News erstellen') }}
                     </flux:button>
-                    <flux:button 
-                        icon="sparkles" 
-                        variant="outline" 
-                        wire:click="openCreateModal"
-                        wire:loading.attr="disabled"
-                        wire:target="generateAIMatchReport,generateAIMatchdayReport"
-                        size="sm"
-                    >
-                        <span wire:loading.remove wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                            {{ __('KI News erstellen') }}
-                        </span>
-                        <span wire:loading wire:target="generateAIMatchReport,generateAIMatchdayReport">
-                            {{ __('Generiere...') }}
-                        </span>
-                    </flux:button>
+                    @if ($this->canCreateSeasonNews())
+                        <flux:button 
+                            icon="sparkles" 
+                            variant="outline" 
+                            wire:click="generateAISeasonReport"
+                            wire:loading.attr="disabled"
+                            wire:target="generateAISeasonReport"
+                            size="sm"
+                        >
+                            <span wire:loading.remove wire:target="generateAISeasonReport">
+                                {{ __('KI News erstellen') }}
+                            </span>
+                            <span wire:loading wire:target="generateAISeasonReport">
+                                {{ __('Generiere...') }}
+                            </span>
+                        </flux:button>
+                    @endif
                 </div>
             </div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-6">
+            @if ($aiGenerationError)
+                <div class="mb-4">
+                    <flux:callout variant="danger" icon="exclamation-triangle">
+                        <flux:heading size="sm">{{ __('Fehler bei der KI-Generierung') }}</flux:heading>
+                        <p class="mt-2 text-sm">{{ $aiGenerationError }}</p>
+                        <flux:button 
+                            size="xs" 
+                            variant="ghost" 
+                            wire:click="$set('aiGenerationError', null)"
+                            class="mt-2"
+                        >
+                            {{ __('Schließen') }}
+                        </flux:button>
+                    </flux:callout>
+                </div>
+            @endif
             <div class="mb-4">
                 <flux:input
                     wire:model.live.debounce.300ms="search"
