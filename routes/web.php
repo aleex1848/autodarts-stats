@@ -200,6 +200,7 @@ Route::middleware(['auth', 'verified', 'role:Super-Admin|Admin'])
         
         Volt::route('admin/page-settings', 'admin.page-settings.index')->name('page-settings.index');
         Volt::route('admin/page-settings/scheduler', 'admin.page-settings.scheduler')->name('page-settings.scheduler');
+        Volt::route('admin/page-settings/openai', 'admin.page-settings.openai')->name('page-settings.openai');
     });
 
 Route::middleware(['auth', 'verified'])

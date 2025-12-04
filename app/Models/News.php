@@ -198,5 +198,121 @@ class News extends Model
     {
         return $query->where('matchday_fixture_id', $fixture->id);
     }
+
+    /**
+     * Get the content as rendered HTML from Markdown.
+     */
+    public function getRenderedContentAttribute(): string
+    {
+        if (empty($this->content)) {
+            return '';
+        }
+
+        // Check if spatie/laravel-markdown is available
+        if (class_exists(\Spatie\LaravelMarkdown\MarkdownRenderer::class)) {
+            try {
+                return app(\Spatie\LaravelMarkdown\MarkdownRenderer::class)
+                    ->toHtml($this->content);
+            } catch (\Exception $e) {
+                // Fallback if markdown rendering fails
+                \Illuminate\Support\Facades\Log::warning('Markdown rendering failed', [
+                    'error' => $e->getMessage(),
+                ]);
+                return $this->parseMarkdown($this->content);
+            }
+        }
+
+        // Fallback: Simple Markdown parsing if package not available
+        return $this->parseMarkdown($this->content);
+    }
+
+    /**
+     * Simple Markdown parser as fallback.
+     * This is a basic parser that handles common Markdown syntax.
+     */
+    protected function parseMarkdown(string $markdown): string
+    {
+        $html = $markdown;
+
+        // Code blocks first (to avoid parsing content inside code blocks)
+        $codeBlocks = [];
+        $html = preg_replace_callback('/```(\w+)?\n(.*?)```/s', function ($matches) use (&$codeBlocks) {
+            $id = 'CODE_BLOCK_' . count($codeBlocks);
+            $codeBlocks[$id] = '<pre class="bg-zinc-100 dark:bg-zinc-800 p-4 rounded-lg overflow-x-auto"><code class="language-' . ($matches[1] ?? '') . '">' . htmlspecialchars($matches[2], ENT_QUOTES, 'UTF-8') . '</code></pre>';
+            return $id;
+        }, $html);
+
+        // Inline code
+        $html = preg_replace('/`([^`]+)`/', '<code class="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-sm">$1</code>', $html);
+
+        // Headers (must be at start of line)
+        $html = preg_replace('/^#### (.*?)$/m', '<h4 class="text-xl font-bold mt-6 mb-3">$1</h4>', $html);
+        $html = preg_replace('/^### (.*?)$/m', '<h3 class="text-2xl font-bold mt-6 mb-3">$1</h3>', $html);
+        $html = preg_replace('/^## (.*?)$/m', '<h2 class="text-3xl font-bold mt-6 mb-4">$1</h2>', $html);
+        $html = preg_replace('/^# (.*?)$/m', '<h1 class="text-4xl font-bold mt-6 mb-4">$1</h1>', $html);
+
+        // Bold (must come before italic)
+        $html = preg_replace('/\*\*(.*?)\*\*/', '<strong class="font-semibold">$1</strong>', $html);
+        $html = preg_replace('/__(.*?)__/', '<strong class="font-semibold">$1</strong>', $html);
+
+        // Italic (but not if already bold)
+        $html = preg_replace('/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $html);
+        $html = preg_replace('/(?<!_)_(?!_)([^_\n]+?)(?<!_)_(?!_)/', '<em>$1</em>', $html);
+
+        // Links
+        $html = preg_replace('/\[([^\]]+)\]\(([^\)]+)\)/', '<a href="$2" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline">$1</a>', $html);
+
+        // Lists (unordered) - process line by line
+        $lines = explode("\n", $html);
+        $inList = false;
+        $result = [];
+        
+        foreach ($lines as $line) {
+            if (preg_match('/^[\*\-\+] (.+)$/', $line, $matches)) {
+                if (!$inList) {
+                    $result[] = '<ul class="list-disc list-inside space-y-1 my-4">';
+                    $inList = true;
+                }
+                $result[] = '<li>' . trim($matches[1]) . '</li>';
+            } else {
+                if ($inList) {
+                    $result[] = '</ul>';
+                    $inList = false;
+                }
+                $result[] = $line;
+            }
+        }
+        
+        if ($inList) {
+            $result[] = '</ul>';
+        }
+        
+        $html = implode("\n", $result);
+
+        // Restore code blocks
+        foreach ($codeBlocks as $id => $code) {
+            $html = str_replace($id, $code, $html);
+        }
+
+        // Paragraphs (double newlines become paragraph breaks)
+        // Split by double newlines, but preserve single newlines within paragraphs
+        $paragraphs = preg_split('/\n\s*\n/', $html);
+        $wrappedParagraphs = [];
+        
+        foreach ($paragraphs as $para) {
+            $para = trim($para);
+            if (!empty($para) && !preg_match('/^<(h[1-6]|ul|pre|code)/', $para)) {
+                // Convert single newlines to <br> within paragraphs
+                $para = preg_replace('/\n/', '<br>', $para);
+                $wrappedParagraphs[] = '<p class="mb-4">' . $para . '</p>';
+            } else {
+                $wrappedParagraphs[] = $para;
+            }
+        }
+        
+        $html = implode("\n", $wrappedParagraphs);
+
+        return $html;
+    }
 }
 

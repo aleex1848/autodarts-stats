@@ -1,9 +1,13 @@
 <?php
 
+use App\Models\News;
+use App\Models\NewsCategory;
 use App\Models\Season;
 use App\Services\LeagueStandingsCalculator;
+use App\Services\OpenAIService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -20,6 +24,7 @@ new class extends Component {
     public bool $success = false;
     public bool $showConfirmModal = false;
     public ?int $selectedMatchdayId = null;
+    public bool $isGeneratingAI = false;
 
     public function mount(Season $season): void
     {
@@ -29,6 +34,14 @@ new class extends Component {
             'matchdays.fixtures.homePlayer.user',
             'matchdays.fixtures.awayPlayer.user',
             'matchdays.fixtures.dartMatch',
+            'matchdays.news' => function ($query) use ($season) {
+                $query->where('season_id', $season->id)
+                    ->where('is_published', true);
+            },
+            'matchdays.fixtures.news' => function ($query) use ($season) {
+                $query->where('season_id', $season->id)
+                    ->where('is_published', true);
+            },
         ]);
         
         $this->playerId = Auth::user()?->player?->id;
@@ -178,6 +191,78 @@ new class extends Component {
         
         // Clear any previous errors
         $this->resetErrorBag();
+    }
+
+    public function generateAIMatchdayReport(int $matchdayId): void
+    {
+        $matchday = \App\Models\Matchday::findOrFail($matchdayId);
+        
+        if (! ($this->season->isAdmin(Auth::user()) || $this->season->league->isAdmin(Auth::user()))) {
+            abort(403);
+        }
+
+        $this->isGeneratingAI = true;
+
+        try {
+            $openAIService = app(OpenAIService::class);
+            $content = $openAIService->generateMatchdayReport($matchday);
+
+            $title = $this->extractTitleFromContent($content);
+            $excerpt = $this->extractExcerptFromContent($content);
+
+            $spieltagsberichtCategory = NewsCategory::where('slug', 'spieltagsbericht')->first();
+
+            $news = News::create([
+                'type' => 'league',
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'content' => $content,
+                'excerpt' => $excerpt,
+                'league_id' => $this->season->league_id,
+                'season_id' => $this->season->id,
+                'category_id' => $spieltagsberichtCategory?->id,
+                'matchday_id' => $matchdayId,
+                'is_published' => true,
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            $this->dispatch('notify', title: __('KI-News erfolgreich erstellt'));
+        } catch (\Exception $e) {
+            $this->dispatch('notify', title: __('Fehler bei der KI-Generierung'), description: $e->getMessage(), variant: 'danger');
+        } finally {
+            $this->isGeneratingAI = false;
+        }
+    }
+
+    protected function extractTitleFromContent(string $content): string
+    {
+        $lines = explode("\n", trim($content));
+        $firstLine = trim($lines[0] ?? '');
+
+        $firstLine = preg_replace('/^#+\s*/', '', $firstLine);
+
+        if (strlen($firstLine) > 100) {
+            $sentences = preg_split('/([.!?]+)/', $firstLine, 2, PREG_SPLIT_DELIM_CAPTURE);
+            $firstLine = trim($sentences[0] . ($sentences[1] ?? ''));
+        }
+
+        if (empty($firstLine) || strlen($firstLine) < 10) {
+            return __('Spieltagsbericht');
+        }
+
+        return $firstLine;
+    }
+
+    protected function extractExcerptFromContent(string $content): string
+    {
+        $paragraphs = preg_split('/\n\s*\n/', trim($content));
+        $firstParagraph = trim($paragraphs[0] ?? '');
+
+        if (strlen($firstParagraph) > 500) {
+            $firstParagraph = substr($firstParagraph, 0, 497) . '...';
+        }
+
+        return $firstParagraph ?: substr(strip_tags($content), 0, 200);
     }
 
     public function stopMatchday(): void
@@ -344,6 +429,7 @@ new class extends Component {
                 {{ __('News') }}
             </button>
         @endif
+
     </div>
 
     @if ($activeTab === 'overview')
@@ -733,15 +819,47 @@ new class extends Component {
                             @endif
                         </div>
                         @if ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user()))
-                            <flux:button
-                                size="sm"
-                                variant="outline"
-                                icon="document-plus"
-                                :href="route('seasons.show', $season) . '?activeTab=news&createNews=1&urlMatchdayId=' . $matchday->id"
-                                wire:navigate
-                            >
-                                {{ __('News erstellen') }}
-                            </flux:button>
+                            <div class="flex gap-2">
+                                @php
+                                    $matchdayNews = $matchday->news->first();
+                                @endphp
+                                @if ($matchdayNews)
+                                    <flux:button
+                                        size="sm"
+                                        variant="outline"
+                                        icon="document-text"
+                                        :href="route('news.show', $matchdayNews)"
+                                        wire:navigate
+                                    >
+                                        {{ __('News anzeigen') }}
+                                    </flux:button>
+                                @else
+                                    <flux:button
+                                        size="sm"
+                                        variant="outline"
+                                        icon="document-plus"
+                                        :href="route('seasons.show', $season) . '?activeTab=news&createNews=1&urlMatchdayId=' . $matchday->id"
+                                        wire:navigate
+                                    >
+                                        {{ __('News erstellen') }}
+                                    </flux:button>
+                                    <flux:button
+                                        size="sm"
+                                        variant="outline"
+                                        icon="sparkles"
+                                        wire:click="generateAIMatchdayReport({{ $matchday->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="generateAIMatchdayReport({{ $matchday->id }})"
+                                    >
+                                        <span wire:loading.remove wire:target="generateAIMatchdayReport({{ $matchday->id }})">
+                                            {{ __('KI News erstellen') }}
+                                        </span>
+                                        <span wire:loading wire:target="generateAIMatchdayReport({{ $matchday->id }})">
+                                            {{ __('Generiere...') }}
+                                        </span>
+                                    </flux:button>
+                                @endif
+                            </div>
                         @endif
                     </div>
 

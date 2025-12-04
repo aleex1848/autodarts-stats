@@ -4,6 +4,7 @@ use App\Models\League;
 use App\Models\News;
 use App\Models\NewsCategory;
 use App\Models\Season;
+use App\Services\OpenAIService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -43,6 +44,8 @@ new class extends Component
     public bool $showDeleteModal = false;
     public ?int $newsIdBeingDeleted = null;
     public ?string $newsTitleBeingDeleted = null;
+    public bool $isGeneratingAI = false;
+    public ?string $aiGenerationError = null;
 
     protected $queryString = [
         'search' => ['except' => ''],
@@ -319,6 +322,135 @@ new class extends Component
         $category = NewsCategory::find($this->categoryId);
         return $category && $category->slug === 'spielberichte';
     }
+
+    public function generateAIMatchReport(int $fixtureId): void
+    {
+        $this->authorize('create', News::class, 'league');
+
+        $fixture = \App\Models\MatchdayFixture::findOrFail($fixtureId);
+        
+        if (! $fixture->dartMatch) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Das Spiel hat noch kein Match-Daten.'), variant: 'danger');
+            return;
+        }
+
+        $this->isGeneratingAI = true;
+        $this->aiGenerationError = null;
+
+        try {
+            $openAIService = app(OpenAIService::class);
+            $content = $openAIService->generateMatchReport($fixture->dartMatch);
+
+            // Validate content is not empty
+            if (empty(trim($content))) {
+                throw new \Exception('Die OpenAI API hat keinen Inhalt zurückgegeben. Bitte versuchen Sie es erneut oder wählen Sie ein anderes Modell.');
+            }
+
+            $title = $this->extractTitleFromContent($content);
+            $excerpt = $this->extractExcerptFromContent($content);
+
+            $spielberichteCategory = NewsCategory::where('slug', 'spielberichte')->first();
+
+            $news = News::create([
+                'type' => 'league',
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'content' => $content,
+                'excerpt' => $excerpt,
+                'league_id' => $this->league->id,
+                'season_id' => $fixture->matchday->season_id,
+                'category_id' => $spielberichteCategory?->id,
+                'matchday_id' => $fixture->matchday_id,
+                'matchday_fixture_id' => $fixtureId,
+                'is_published' => true,
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            $this->dispatch('notify', title: __('KI-News erfolgreich erstellt'));
+        } catch (\Exception $e) {
+            $this->aiGenerationError = $e->getMessage();
+            $this->dispatch('notify', title: __('Fehler bei der KI-Generierung'), description: $e->getMessage(), variant: 'danger');
+        } finally {
+            $this->isGeneratingAI = false;
+        }
+    }
+
+    public function generateAIMatchdayReport(int $matchdayId): void
+    {
+        $this->authorize('create', News::class, 'league');
+
+        $matchday = \App\Models\Matchday::findOrFail($matchdayId);
+
+        $this->isGeneratingAI = true;
+        $this->aiGenerationError = null;
+
+        try {
+            $openAIService = app(OpenAIService::class);
+            $content = $openAIService->generateMatchdayReport($matchday);
+
+            // Validate content is not empty
+            if (empty(trim($content))) {
+                throw new \Exception('Die OpenAI API hat keinen Inhalt zurückgegeben. Bitte versuchen Sie es erneut oder wählen Sie ein anderes Modell.');
+            }
+
+            $title = $this->extractTitleFromContent($content);
+            $excerpt = $this->extractExcerptFromContent($content);
+
+            $spieltagsberichtCategory = NewsCategory::where('slug', 'spieltagsbericht')->first();
+
+            $news = News::create([
+                'type' => 'league',
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'content' => $content,
+                'excerpt' => $excerpt,
+                'league_id' => $this->league->id,
+                'season_id' => $matchday->season_id,
+                'category_id' => $spieltagsberichtCategory?->id,
+                'matchday_id' => $matchdayId,
+                'is_published' => true,
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            $this->dispatch('notify', title: __('KI-News erfolgreich erstellt'));
+        } catch (\Exception $e) {
+            $this->aiGenerationError = $e->getMessage();
+            $this->dispatch('notify', title: __('Fehler bei der KI-Generierung'), description: $e->getMessage(), variant: 'danger');
+        } finally {
+            $this->isGeneratingAI = false;
+        }
+    }
+
+    protected function extractTitleFromContent(string $content): string
+    {
+        $lines = explode("\n", trim($content));
+        $firstLine = trim($lines[0] ?? '');
+
+        $firstLine = preg_replace('/^#+\s*/', '', $firstLine);
+
+        if (strlen($firstLine) > 100) {
+            $sentences = preg_split('/([.!?]+)/', $firstLine, 2, PREG_SPLIT_DELIM_CAPTURE);
+            $firstLine = trim($sentences[0] . ($sentences[1] ?? ''));
+        }
+
+        if (empty($firstLine) || strlen($firstLine) < 10) {
+            return __('Spielbericht');
+        }
+
+        return $firstLine;
+    }
+
+    protected function extractExcerptFromContent(string $content): string
+    {
+        $paragraphs = preg_split('/\n\s*\n/', trim($content));
+        $firstParagraph = trim($paragraphs[0] ?? '');
+
+        if (strlen($firstParagraph) > 500) {
+            $firstParagraph = substr($firstParagraph, 0, 497) . '...';
+        }
+
+        return $firstParagraph ?: substr(strip_tags($content), 0, 200);
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -328,9 +460,25 @@ new class extends Component
             <flux:subheading>{{ __('Verwalte News für diese Liga') }}</flux:subheading>
         </div>
 
-        <flux:button icon="plus" variant="primary" wire:click="openCreateModal">
-            {{ __('News erstellen') }}
-        </flux:button>
+        <div class="flex gap-2">
+            <flux:button icon="plus" variant="primary" wire:click="openCreateModal">
+                {{ __('News erstellen') }}
+            </flux:button>
+            <flux:button 
+                icon="sparkles" 
+                variant="outline" 
+                wire:click="openCreateModal"
+                wire:loading.attr="disabled"
+                wire:target="generateAIMatchReport,generateAIMatchdayReport"
+            >
+                <span wire:loading.remove wire:target="generateAIMatchReport,generateAIMatchdayReport">
+                    {{ __('KI News erstellen') }}
+                </span>
+                <span wire:loading wire:target="generateAIMatchReport,generateAIMatchdayReport">
+                    {{ __('Generiere...') }}
+                </span>
+            </flux:button>
+        </div>
     </div>
 
     <div class="space-y-4">

@@ -2,12 +2,16 @@
 
 use App\Models\DartMatch;
 use App\Models\DartThrow;
+use App\Models\News;
+use App\Models\NewsCategory;
 use App\Services\MatchReprocessingService;
+use App\Services\OpenAIService;
 use Illuminate\Contracts\Database\Eloquent\Builder as QueryBuilder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 use Livewire\Volt\Component;
 
 new class extends Component
@@ -27,6 +31,8 @@ new class extends Component
     public array $targetSegments = [];
 
     public array $segmentCounts = [];
+
+    public bool $isGeneratingAI = false;
 
     public array $tripleCounts = [];
 
@@ -57,6 +63,9 @@ new class extends Component
             'winner',
             'bullOffs.player.user',
             'fixture.matchday.season.league',
+            'fixture.news' => function ($query) {
+                $query->where('is_published', true);
+            },
             'fixture.homePlayer.user',
             'fixture.awayPlayer.user',
             'fixture.winner',
@@ -374,6 +383,100 @@ new class extends Component
 
         return $this->match->players->contains('id', $this->playerId);
     }
+
+    public function generateAIMatchReport(): void
+    {
+        if (! $this->match->fixture?->matchday?->season) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Das Match ist nicht mit einer Season verknüpft.'), variant: 'danger');
+            return;
+        }
+
+        $season = $this->match->fixture->matchday->season;
+        
+        if (! ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user()))) {
+            abort(403);
+        }
+
+        if (! $this->match->fixture) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Das Match hat noch kein Fixture-Daten.'), variant: 'danger');
+            return;
+        }
+
+        $this->isGeneratingAI = true;
+
+        try {
+            $openAIService = app(OpenAIService::class);
+            $content = $openAIService->generateMatchReport($this->match);
+
+            // Validate content is not empty
+            if (empty(trim($content))) {
+                throw new \Exception('Die OpenAI API hat keinen Inhalt zurückgegeben. Bitte versuchen Sie es erneut oder wählen Sie ein anderes Modell.');
+            }
+
+            // Extract title from content
+            $title = $this->extractTitleFromContent($content);
+            $excerpt = $this->extractExcerptFromContent($content);
+
+            // Get category
+            $spielberichteCategory = NewsCategory::where('slug', 'spielberichte')->first();
+
+            // Create news
+            $news = News::create([
+                'type' => 'league',
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'content' => $content,
+                'excerpt' => $excerpt,
+                'league_id' => $season->league_id,
+                'season_id' => $season->id,
+                'category_id' => $spielberichteCategory?->id,
+                'matchday_id' => $this->match->fixture->matchday_id,
+                'matchday_fixture_id' => $this->match->fixture->id,
+                'is_published' => true,
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            $this->dispatch('notify', title: __('KI-News erfolgreich erstellt'));
+            
+            // Redirect to news page
+            $this->redirect(route('seasons.show', $season) . '?activeTab=news', navigate: true);
+        } catch (\Exception $e) {
+            $this->dispatch('notify', title: __('Fehler bei der KI-Generierung'), description: $e->getMessage(), variant: 'danger');
+        } finally {
+            $this->isGeneratingAI = false;
+        }
+    }
+
+    protected function extractTitleFromContent(string $content): string
+    {
+        $lines = explode("\n", trim($content));
+        $firstLine = trim($lines[0] ?? '');
+
+        $firstLine = preg_replace('/^#+\s*/', '', $firstLine);
+
+        if (strlen($firstLine) > 100) {
+            $sentences = preg_split('/([.!?]+)/', $firstLine, 2, PREG_SPLIT_DELIM_CAPTURE);
+            $firstLine = trim($sentences[0] . ($sentences[1] ?? ''));
+        }
+
+        if (empty($firstLine) || strlen($firstLine) < 10) {
+            return __('Spielbericht');
+        }
+
+        return $firstLine;
+    }
+
+    protected function extractExcerptFromContent(string $content): string
+    {
+        $paragraphs = preg_split('/\n\s*\n/', trim($content));
+        $firstParagraph = trim($paragraphs[0] ?? '');
+
+        if (strlen($firstParagraph) > 500) {
+            $firstParagraph = substr($firstParagraph, 0, 497) . '...';
+        }
+
+        return $firstParagraph ?: substr(strip_tags($content), 0, 200);
+    }
 }; ?>
 
 <div class="space-y-10">
@@ -422,14 +525,42 @@ new class extends Component
 
     @if ($match->fixture?->matchday?->season && ($match->fixture->matchday->season->isAdmin(Auth::user()) || $match->fixture->matchday->season->league->isAdmin(Auth::user())))
         <div class="flex justify-end gap-2">
-            <flux:button
-                variant="primary"
-                icon="document-plus"
-                :href="route('seasons.show', $match->fixture->matchday->season) . '?activeTab=news&createNews=1&urlFixtureId=' . $match->fixture->id"
-                wire:navigate
-            >
-                {{ __('News erstellen') }}
-            </flux:button>
+            @php
+                $fixtureNews = $match->fixture->news->first();
+            @endphp
+            @if ($fixtureNews)
+                <flux:button
+                    variant="primary"
+                    icon="document-text"
+                    :href="route('news.show', $fixtureNews)"
+                    wire:navigate
+                >
+                    {{ __('News anzeigen') }}
+                </flux:button>
+            @else
+                <flux:button
+                    variant="primary"
+                    icon="document-plus"
+                    :href="route('seasons.show', $match->fixture->matchday->season) . '?activeTab=news&createNews=1&urlFixtureId=' . $match->fixture->id"
+                    wire:navigate
+                >
+                    {{ __('News erstellen') }}
+                </flux:button>
+                <flux:button
+                    variant="outline"
+                    icon="sparkles"
+                    wire:click="generateAIMatchReport"
+                    wire:loading.attr="disabled"
+                    wire:target="generateAIMatchReport"
+                >
+                    <span wire:loading.remove wire:target="generateAIMatchReport">
+                        {{ __('KI News erstellen') }}
+                    </span>
+                    <span wire:loading wire:target="generateAIMatchReport">
+                        {{ __('Generiere...') }}
+                    </span>
+                </flux:button>
+            @endif
         </div>
     @endif
 

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MatchdayFixture extends Model
 {
@@ -58,5 +59,18 @@ class MatchdayFixture extends Model
     public function dartMatch(): BelongsTo
     {
         return $this->belongsTo(DartMatch::class, 'dart_match_id');
+    }
+
+    public function news(): HasMany
+    {
+        return $this->hasMany(News::class, 'matchday_fixture_id');
+    }
+
+    /**
+     * Get the first published news for this fixture.
+     */
+    public function getFirstNewsAttribute(): ?News
+    {
+        return $this->news()->where('is_published', true)->first();
     }
 }

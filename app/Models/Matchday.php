@@ -40,6 +40,19 @@ class Matchday extends Model
         return $this->hasMany(MatchdayFixture::class);
     }
 
+    public function news(): HasMany
+    {
+        return $this->hasMany(News::class);
+    }
+
+    /**
+     * Get the first published news for this matchday.
+     */
+    public function getFirstNewsAttribute(): ?News
+    {
+        return $this->news()->where('is_published', true)->first();
+    }
+
     /**
      * Check if all fixtures of this matchday are completed.
      */
