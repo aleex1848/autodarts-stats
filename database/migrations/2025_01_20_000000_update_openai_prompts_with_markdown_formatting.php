@@ -1,37 +1,14 @@
 <?php
 
-namespace App\Models;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-
-class OpenAISetting extends Model
+return new class extends Migration
 {
-    use HasFactory;
-
-    protected $table = 'openai_settings';
-
-    protected $fillable = [
-        'model',
-        'max_tokens',
-        'max_completion_tokens',
-        'match_prompt',
-        'matchday_prompt',
-        'season_prompt',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'max_tokens' => 'integer',
-            'max_completion_tokens' => 'integer',
-        ];
-    }
-
     /**
-     * Get the current OpenAI settings (singleton pattern).
+     * Run the migrations.
      */
-    public static function getCurrent(): self
+    public function up(): void
     {
         $defaultMatchPrompt = "Schreibe einen spannenden, sportjournalistischen Spielbericht für ein Dart-Match.\n\n";
         $defaultMatchPrompt .= "Match-Informationen:\n";
@@ -90,14 +67,72 @@ class OpenAISetting extends Model
         $defaultSeasonPrompt .= "Strukturiere den Artikel mit einer Einleitung, einem Hauptteil mit mehreren Abschnitten (z.B. 'Saisonverlauf', 'Highlights', 'Endtabelle', 'Fazit') und einem abschließenden Fazit. ";
         $defaultSeasonPrompt .= "Verwende Absätze mit doppelten Zeilenumbrüchen für bessere Lesbarkeit.";
 
-        return static::firstOrCreate([], [
-            'model' => config('openai.default_model', 'o1-preview'),
-            'max_tokens' => config('openai.max_tokens', 2000),
-            'max_completion_tokens' => config('openai.max_completion_tokens', 4000),
+        // Update all existing records with the new prompts
+        DB::table('openai_settings')->update([
             'match_prompt' => $defaultMatchPrompt,
             'matchday_prompt' => $defaultMatchdayPrompt,
             'season_prompt' => $defaultSeasonPrompt,
         ]);
     }
-}
 
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        // Revert to old prompts (without markdown formatting instructions)
+        $oldMatchPrompt = "Schreibe einen spannenden, sportjournalistischen Spielbericht für ein Dart-Match.\n\n";
+        $oldMatchPrompt .= "Match-Informationen:\n";
+        $oldMatchPrompt .= "- Liga: {league_name}\n";
+        $oldMatchPrompt .= "- Saison: {season_name}\n";
+        $oldMatchPrompt .= "- Spieltag: {matchday_number}\n";
+        $oldMatchPrompt .= "- Format: {match_format}\n";
+        $oldMatchPrompt .= "- Spiel: {home_player} vs {away_player}\n";
+        $oldMatchPrompt .= "- Gewinner: {winner}\n\n";
+        $oldMatchPrompt .= "Spieler-Statistiken:\n";
+        $oldMatchPrompt .= "{player_stats}\n\n";
+        $oldMatchPrompt .= "Spielverlauf:\n";
+        $oldMatchPrompt .= "{match_progression}\n\n";
+        $oldMatchPrompt .= "{highlights}\n\n";
+        $oldMatchPrompt .= "Schreibe einen spannenden, sportjournalistischen Artikel, der den Spielverlauf beschreibt. ";
+        $oldMatchPrompt .= "Erwähne wichtige Wendepunkte, wie z.B. 'Player A konnte das Spiel im dritten Leg drehen und an sich reißen. ";
+        $oldMatchPrompt .= "Mit einem High Finish von 132 ließ er Player B hinter sich.' ";
+        $oldMatchPrompt .= "Der Artikel soll zwischen 300 und 500 Wörtern lang sein und auf Deutsch verfasst werden.";
+
+        $oldMatchdayPrompt = "Schreibe einen spannenden, sportjournalistischen Spieltagsbericht für einen Dart-Spieltag.\n\n";
+        $oldMatchdayPrompt .= "Spieltag-Informationen:\n";
+        $oldMatchdayPrompt .= "- Liga: {league_name}\n";
+        $oldMatchdayPrompt .= "- Saison: {season_name}\n";
+        $oldMatchdayPrompt .= "- Spieltag: {matchday_number}\n";
+        $oldMatchdayPrompt .= "- Gesamtspiele: {total_fixtures}\n";
+        $oldMatchdayPrompt .= "- Abgeschlossene Spiele: {completed_fixtures}\n\n";
+        $oldMatchdayPrompt .= "Spielergebnisse:\n";
+        $oldMatchdayPrompt .= "{match_results}\n\n";
+        $oldMatchdayPrompt .= "{highlights}\n\n";
+        $oldMatchdayPrompt .= "{table_changes}\n\n";
+        $oldMatchdayPrompt .= "Schreibe einen spannenden, sportjournalistischen Artikel über den Spieltag. ";
+        $oldMatchdayPrompt .= "Erwähne Überraschungssieger, wichtige Tabellenänderungen und besondere Vorkommnisse. ";
+        $oldMatchdayPrompt .= "Der Artikel soll zwischen 400 und 600 Wörtern lang sein und auf Deutsch verfasst werden.";
+
+        $oldSeasonPrompt = "Schreibe einen spannenden, sportjournalistischen Saisonbericht für eine Dart-Saison.\n\n";
+        $oldSeasonPrompt .= "Saison-Informationen:\n";
+        $oldSeasonPrompt .= "- Liga: {league_name}\n";
+        $oldSeasonPrompt .= "- Saison: {season_name}\n";
+        $oldSeasonPrompt .= "- Gesamtspieltage: {total_matchdays}\n";
+        $oldSeasonPrompt .= "- Abgeschlossene Spieltage: {completed_matchdays}\n\n";
+        $oldSeasonPrompt .= "Saisonergebnisse:\n";
+        $oldSeasonPrompt .= "{season_results}\n\n";
+        $oldSeasonPrompt .= "{final_standings}\n\n";
+        $oldSeasonPrompt .= "{highlights}\n\n";
+        $oldSeasonPrompt .= "{champion}\n\n";
+        $oldSeasonPrompt .= "Schreibe einen spannenden, sportjournalistischen Artikel über die gesamte Saison. ";
+        $oldSeasonPrompt .= "Erwähne den Saisonverlauf, wichtige Wendepunkte, Überraschungen und die Entwicklung der Tabelle. ";
+        $oldSeasonPrompt .= "Der Artikel soll zwischen 500 und 800 Wörtern lang sein und auf Deutsch verfasst werden.";
+
+        DB::table('openai_settings')->update([
+            'match_prompt' => $oldMatchPrompt,
+            'matchday_prompt' => $oldMatchdayPrompt,
+            'season_prompt' => $oldSeasonPrompt,
+        ]);
+    }
+};

@@ -121,10 +121,39 @@ new class extends Component
     </div>
 
     {{-- Content --}}
-    <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-        <div class="prose prose-zinc dark:prose-invert max-w-none">
+    <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+        <article class="prose prose-zinc dark:prose-invert max-w-none 
+            prose-headings:font-bold 
+            prose-headings:text-neutral-900 
+            dark:prose-headings:text-neutral-100 
+            prose-h1:text-4xl 
+            prose-h1:mt-10 
+            prose-h1:mb-6 
+            prose-h1:leading-tight
+            prose-h2:text-3xl 
+            prose-h2:mt-10 
+            prose-h2:mb-5 
+            prose-h2:leading-tight
+            prose-h3:text-2xl 
+            prose-h3:mt-8 
+            prose-h3:mb-4
+            prose-h4:text-xl 
+            prose-h4:mt-8 
+            prose-h4:mb-4
+            prose-p:text-neutral-700 
+            dark:prose-p:text-neutral-300 
+            prose-p:leading-relaxed 
+            prose-p:text-base 
+            prose-p:mb-6
+            prose-a:text-blue-600 
+            dark:prose-a:text-blue-400 
+            prose-strong:text-neutral-900 
+            dark:prose-strong:text-neutral-100 
+            prose-ul:my-6 
+            prose-ul:ml-6 
+            prose-li:leading-relaxed">
             {!! $news->rendered_content !!}
-        </div>
+        </article>
     </div>
 </section>
 
