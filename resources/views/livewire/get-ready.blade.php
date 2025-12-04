@@ -229,6 +229,15 @@ new class extends Component
                                 >
                                     {{ __('Browser Extensions') }}
                                 </a>
+                                <span class="mx-1">|</span>
+                                <a 
+                                    href="https://www.youtube.com/watch?v=uznl9u2OZH8" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    class="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                >
+                                    {{ __('Anleitung') }}
+                                </a>
                             </li>
                             <li>
                                 {{ __('Tools öffnen und auf dem Reiter Webhooks die URL und den Token eintragen.') }}
@@ -258,6 +267,7 @@ new class extends Component
                             <li>{{ __('Gib deinen AutoDarts-Namen ein') }}</li>
                             <li>{{ __('Klicke auf "Identifizierung starten"') }}</li>
                             <li>{{ __('Starte ein Spiel gegen einen Bot (z.B. "Bot Level 1") in Autodarts') }}</li>
+                            <li>{{ __('Wirf einen Pfeil in Autodarts') }}</li>
                             <li>{{ __('Dein Spieler wird automatisch mit deinem Account verknüpft, wenn der Name übereinstimmt') }}</li>
                         </ol>
                     </flux:callout>
