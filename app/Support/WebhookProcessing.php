@@ -1505,64 +1505,144 @@ class WebhookProcessing extends ProcessWebhookJob
         }
 
         foreach ($legs as $leg) {
-            // Find winner by looking for turns with score_after = 0 (successful checkout)
-            // First try with finished_at, then without (as fallback)
-            $winningTurn = Turn::query()
-                ->where('leg_id', $leg->id)
-                ->where('score_after', 0)
-                ->whereNotNull('finished_at')
-                ->orderBy('finished_at', 'desc')
-                ->first();
+            $winningTurn = null;
 
-            // If no turn with finished_at, try without (some turns might not have finished_at set)
-            if (! $winningTurn) {
-                $winningTurn = Turn::query()
-                    ->where('leg_id', $leg->id)
-                    ->where('score_after', 0)
-                    ->orderBy('id', 'desc')
-                    ->first();
-            }
+            // If match is finished and we have legs_won statistics, prioritize using them
+            // This is more reliable than trying to find score_after = 0 turns
+            if (($matchData['finished'] ?? false) && ! empty($legsWonByPlayer)) {
+                // Check if this leg already has a winner assigned
+                $currentWinnerId = $leg->winner_player_id;
+                $currentWinsForCurrentWinner = $currentWinnerId ? $legs->where('winner_player_id', $currentWinnerId)->count() : 0;
+                $expectedWinsForCurrentWinner = $currentWinnerId ? ($legsWonByPlayer[$currentWinnerId] ?? 0) : 0;
 
-            // If still no winner, try to find the turn with the lowest score_after (closest to 0)
-            // This handles cases where the winning turn might have been corrected or not saved properly
-            if (! $winningTurn) {
-                $lowestScoreTurn = Turn::query()
-                    ->where('leg_id', $leg->id)
-                    ->whereNotNull('score_after')
-                    ->orderBy('score_after', 'asc')
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                // If the lowest score is 0 or very low (e.g., checkout situation), use it
-                if ($lowestScoreTurn && $lowestScoreTurn->score_after === 0) {
-                    $winningTurn = $lowestScoreTurn;
-                }
-            }
-
-            // Verify winner against legs_won statistics if match is finished
-            // This prevents incorrectly assigning legs when turns have score_after = 0 but the player didn't actually win
-            if ($winningTurn && ($matchData['finished'] ?? false) && ! empty($legsWonByPlayer)) {
-                $expectedWins = $legsWonByPlayer[$winningTurn->player_id] ?? 0;
-                $currentWins = $legs->where('winner_player_id', $winningTurn->player_id)->count();
-
-                // If this player already has enough wins, this leg might belong to another player
-                if ($currentWins >= $expectedWins) {
-                    // Find the player who still needs wins
+                // If current winner has too many wins, find the correct player
+                if ($currentWinnerId && $currentWinsForCurrentWinner > $expectedWinsForCurrentWinner) {
+                    // Find a player who should have won this leg but doesn't have enough wins yet
                     foreach ($match->players as $player) {
                         $playerExpectedWins = $legsWonByPlayer[$player->id] ?? 0;
                         $playerCurrentWins = $legs->where('winner_player_id', $player->id)->count();
 
                         if ($playerCurrentWins < $playerExpectedWins) {
-                            // This player needs more wins - check if they have a turn in this leg
-                            $playerTurn = Turn::query()
+                            // This player needs more wins - try to find their winning turn
+                            $playerWinningTurn = Turn::query()
                                 ->where('leg_id', $leg->id)
                                 ->where('player_id', $player->id)
-                                ->orderBy('id', 'desc')
+                                ->where('score_after', 0)
+                                ->whereNotNull('finished_at')
+                                ->orderBy('finished_at', 'desc')
                                 ->first();
 
-                            if ($playerTurn) {
-                                $winningTurn = $playerTurn;
+                            if (! $playerWinningTurn) {
+                                $playerWinningTurn = Turn::query()
+                                    ->where('leg_id', $leg->id)
+                                    ->where('player_id', $player->id)
+                                    ->where('score_after', 0)
+                                    ->orderBy('id', 'desc')
+                                    ->first();
+                            }
+
+                            if ($playerWinningTurn) {
+                                $winningTurn = $playerWinningTurn;
                                 break;
+                            }
+                        }
+                    }
+                } elseif (! $currentWinnerId) {
+                    // No winner assigned yet - find player who should win this leg
+                    foreach ($match->players as $player) {
+                        $playerExpectedWins = $legsWonByPlayer[$player->id] ?? 0;
+                        $playerCurrentWins = $legs->where('winner_player_id', $player->id)->count();
+
+                        if ($playerCurrentWins < $playerExpectedWins) {
+                            // This player needs more wins - try to find their winning turn
+                            $playerWinningTurn = Turn::query()
+                                ->where('leg_id', $leg->id)
+                                ->where('player_id', $player->id)
+                                ->where('score_after', 0)
+                                ->whereNotNull('finished_at')
+                                ->orderBy('finished_at', 'desc')
+                                ->first();
+
+                            if (! $playerWinningTurn) {
+                                $playerWinningTurn = Turn::query()
+                                    ->where('leg_id', $leg->id)
+                                    ->where('player_id', $player->id)
+                                    ->where('score_after', 0)
+                                    ->orderBy('id', 'desc')
+                                    ->first();
+                            }
+
+                            if ($playerWinningTurn) {
+                                $winningTurn = $playerWinningTurn;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback: Find winner by looking for turns with score_after = 0 (successful checkout)
+            // Only use this if we haven't found a winner yet using legs_won statistics
+            if (! $winningTurn) {
+                // First try with finished_at, then without (as fallback)
+                $winningTurn = Turn::query()
+                    ->where('leg_id', $leg->id)
+                    ->where('score_after', 0)
+                    ->whereNotNull('finished_at')
+                    ->orderBy('finished_at', 'desc')
+                    ->first();
+
+                // If no turn with finished_at, try without (some turns might not have finished_at set)
+                if (! $winningTurn) {
+                    $winningTurn = Turn::query()
+                        ->where('leg_id', $leg->id)
+                        ->where('score_after', 0)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                }
+
+                // If still no winner, try to find the turn with the lowest score_after (closest to 0)
+                // This handles cases where the winning turn might have been corrected or not saved properly
+                if (! $winningTurn) {
+                    $lowestScoreTurn = Turn::query()
+                        ->where('leg_id', $leg->id)
+                        ->whereNotNull('score_after')
+                        ->orderBy('score_after', 'asc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+
+                    // If the lowest score is 0 or very low (e.g., checkout situation), use it
+                    if ($lowestScoreTurn && $lowestScoreTurn->score_after === 0) {
+                        $winningTurn = $lowestScoreTurn;
+                    }
+                }
+
+                // Verify winner against legs_won statistics if match is finished
+                // This prevents incorrectly assigning legs when turns have score_after = 0 but the player didn't actually win
+                if ($winningTurn && ($matchData['finished'] ?? false) && ! empty($legsWonByPlayer)) {
+                    $expectedWins = $legsWonByPlayer[$winningTurn->player_id] ?? 0;
+                    $currentWins = $legs->where('winner_player_id', $winningTurn->player_id)->count();
+
+                    // If this player already has enough wins or has 0 expected wins, this leg might belong to another player
+                    if ($currentWins >= $expectedWins || $expectedWins === 0) {
+                        // Find the player who still needs wins
+                        foreach ($match->players as $player) {
+                            $playerExpectedWins = $legsWonByPlayer[$player->id] ?? 0;
+                            $playerCurrentWins = $legs->where('winner_player_id', $player->id)->count();
+
+                            if ($playerCurrentWins < $playerExpectedWins && $playerExpectedWins > 0) {
+                                // This player needs more wins - check if they have a turn in this leg with score_after = 0
+                                $playerTurn = Turn::query()
+                                    ->where('leg_id', $leg->id)
+                                    ->where('player_id', $player->id)
+                                    ->where('score_after', 0)
+                                    ->orderBy('id', 'desc')
+                                    ->first();
+
+                                if ($playerTurn) {
+                                    $winningTurn = $playerTurn;
+                                    break;
+                                }
                             }
                         }
                     }

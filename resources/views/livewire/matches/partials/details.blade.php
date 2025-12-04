@@ -775,24 +775,15 @@
                                         <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                                             {{ __('Set :set · Leg :leg', ['set' => $leg->set_number, 'leg' => $leg->leg_number]) }}
                                         </span>
-                                        @if ($leg->started_at || $leg->finished_at)
+                                        @if ($leg->started_at && $leg->finished_at)
+                                            @php
+                                                $duration = $leg->started_at->diffForHumans($leg->finished_at, [
+                                                    'syntax' => \Carbon\CarbonInterface::DIFF_ABSOLUTE,
+                                                    'parts' => 2,
+                                                ]);
+                                            @endphp
                                             <span class="text-xs text-zinc-500 dark:text-zinc-400">
-                                                @if ($leg->started_at)
-                                                    {{ $leg->started_at->format('d.m.Y H:i') }}
-                                                @endif
-                                                @if ($leg->finished_at)
-                                                    @if ($leg->started_at) · @endif
-                                                    {{ $leg->finished_at->format('d.m.Y H:i') }}
-                                                @endif
-                                                @if ($leg->started_at && $leg->finished_at)
-                                                    @php
-                                                        $duration = $leg->started_at->diffForHumans($leg->finished_at, [
-                                                            'syntax' => \Carbon\CarbonInterface::DIFF_ABSOLUTE,
-                                                            'parts' => 2,
-                                                        ]);
-                                                    @endphp
-                                                    · <span class="font-medium">{{ __('Dauer: :duration', ['duration' => $duration]) }}</span>
-                                                @endif
+                                                <span class="font-medium">{{ __('Dauer: :duration', ['duration' => $duration]) }}</span>
                                             </span>
                                         @endif
                                     </div>
