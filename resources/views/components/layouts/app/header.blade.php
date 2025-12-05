@@ -233,6 +233,9 @@
                 </flux:menu>
             </flux:dropdown>
 
+            {{-- User Switch Indicator --}}
+            <livewire:user-switch-banner />
+
             <!-- Desktop User Menu -->
             <flux:dropdown position="top" align="end">
                 <flux:profile
