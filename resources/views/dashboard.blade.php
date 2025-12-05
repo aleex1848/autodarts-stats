@@ -25,6 +25,11 @@
             </div>
         </div>
 
+        {{-- Season Standings Compact --}}
+        <div class="px-4 md:px-8 lg:px-16">
+            <livewire:season-standings-compact />
+        </div>
+
         {{-- Obere 3er Grid: Latest, Running, Upcoming --}}
         <div class="grid auto-rows-min gap-4 md:grid-cols-3">
             <livewire:matches.latest />

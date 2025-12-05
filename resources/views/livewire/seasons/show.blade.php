@@ -275,6 +275,149 @@ new class extends Component {
         $this->success = true;
     }
 
+    public function simulateFixture(int $fixtureId): void
+    {
+        // Prüfe, ob in Production
+        if (app()->environment('production')) {
+            $this->dispatch('notify', title: __('Nicht verfügbar'), description: __('Simulation ist in Production nicht verfügbar.'), variant: 'danger');
+            return;
+        }
+
+        // Prüfe Admin-Berechtigung
+        if (! ($this->season->isAdmin(Auth::user()) || $this->season->league->isAdmin(Auth::user()))) {
+            $this->dispatch('notify', title: __('Zugriff verweigert'), description: __('Du hast keine Berechtigung, Matches zu simulieren.'), variant: 'danger');
+            return;
+        }
+
+        $fixture = \App\Models\MatchdayFixture::with(['homePlayer', 'awayPlayer', 'matchday.season'])->find($fixtureId);
+
+        if (! $fixture) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Fixture nicht gefunden.'), variant: 'danger');
+            return;
+        }
+
+        // Prüfe, ob Fixture scheduled ist
+        if ($fixture->status !== 'scheduled') {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Nur scheduled Matches können simuliert werden.'), variant: 'danger');
+            return;
+        }
+
+        // Prüfe, ob Fixture bereits ein Match hat
+        if ($fixture->dart_match_id !== null) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Dieses Match wurde bereits gespielt.'), variant: 'danger');
+            return;
+        }
+
+        try {
+            $simulationService = app(\App\Services\MatchSimulationService::class);
+            $simulationService->simulateMatch($fixture);
+
+            // Lade die Saison neu, um die Änderungen zu sehen
+            $this->season->refresh();
+            $this->season->load([
+                'league',
+                'participants.player',
+                'matchdays.fixtures.homePlayer.user',
+                'matchdays.fixtures.awayPlayer.user',
+                'matchdays.fixtures.dartMatch',
+            ]);
+
+            $this->dispatch('notify', title: __('Erfolg'), description: __('Match wurde erfolgreich simuliert.'), variant: 'success');
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Match simulation failed', [
+                'fixture_id' => $fixtureId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $this->dispatch('notify', title: __('Fehler'), description: __('Fehler bei der Simulation: ' . $e->getMessage()), variant: 'danger');
+        }
+    }
+
+    public function simulateMatchday(int $matchdayId): void
+    {
+        // Prüfe, ob in Production
+        if (app()->environment('production')) {
+            $this->dispatch('notify', title: __('Nicht verfügbar'), description: __('Simulation ist in Production nicht verfügbar.'), variant: 'danger');
+            return;
+        }
+
+        // Prüfe Admin-Berechtigung
+        if (! ($this->season->isAdmin(Auth::user()) || $this->season->league->isAdmin(Auth::user()))) {
+            $this->dispatch('notify', title: __('Zugriff verweigert'), description: __('Du hast keine Berechtigung, Matches zu simulieren.'), variant: 'danger');
+            return;
+        }
+
+        $matchday = \App\Models\Matchday::with(['fixtures.homePlayer', 'fixtures.awayPlayer', 'season'])->find($matchdayId);
+
+        if (! $matchday) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Spieltag nicht gefunden.'), variant: 'danger');
+            return;
+        }
+
+        // Prüfe, ob Spieltag zu dieser Saison gehört
+        if ($matchday->season_id !== $this->season->id) {
+            $this->dispatch('notify', title: __('Fehler'), description: __('Dieser Spieltag gehört nicht zu dieser Saison.'), variant: 'danger');
+            return;
+        }
+
+        // Finde alle scheduled Fixtures für diesen Spieltag
+        $scheduledFixtures = $matchday->fixtures()
+            ->where('status', 'scheduled')
+            ->whereNull('dart_match_id')
+            ->with(['homePlayer', 'awayPlayer'])
+            ->get();
+
+        if ($scheduledFixtures->isEmpty()) {
+            $this->dispatch('notify', title: __('Info'), description: __('Keine scheduled Matches für diesen Spieltag gefunden.'), variant: 'info');
+            return;
+        }
+
+        $simulationService = app(\App\Services\MatchSimulationService::class);
+        $successCount = 0;
+        $errorCount = 0;
+        $errors = [];
+
+        foreach ($scheduledFixtures as $fixture) {
+            try {
+                $simulationService->simulateMatch($fixture);
+                $successCount++;
+            } catch (\Exception $e) {
+                $errorCount++;
+                $errors[] = "Fixture {$fixture->id}: " . $e->getMessage();
+                \Illuminate\Support\Facades\Log::error('Match simulation failed', [
+                    'fixture_id' => $fixture->id,
+                    'matchday_id' => $matchdayId,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        }
+
+        // Lade die Saison neu, um die Änderungen zu sehen
+        $this->season->refresh();
+        $this->season->load([
+            'league',
+            'participants.player',
+            'matchdays.fixtures.homePlayer.user',
+            'matchdays.fixtures.awayPlayer.user',
+            'matchdays.fixtures.dartMatch',
+        ]);
+
+        if ($errorCount === 0) {
+            $this->dispatch('notify', title: __('Erfolg'), description: __('Alle :count Matches wurden erfolgreich simuliert.', ['count' => $successCount]), variant: 'success');
+        } else {
+            $message = __(':success erfolgreich, :errors Fehler.', [
+                'success' => $successCount,
+                'errors' => $errorCount,
+            ]);
+            if (count($errors) <= 3) {
+                $message .= ' ' . implode(' ', $errors);
+            }
+            $this->dispatch('notify', title: __('Teilweise erfolgreich'), description: $message, variant: 'warning');
+        }
+    }
+
     public function with(): array
     {
         $user = Auth::user();
@@ -435,57 +578,61 @@ new class extends Component {
 
     @if ($activeTab === 'overview')
         <div class="space-y-6">
-            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                <flux:heading size="lg" class="mb-4">{{ __('Saison-Informationen') }}</flux:heading>
-
-                <dl class="grid gap-4 md:grid-cols-2">
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</dt>
-                        <dd class="mt-1">
-                            <flux:badge :variant="match($season->status) {
-                                'registration' => 'primary',
-                                'active' => 'success',
-                                'completed' => 'subtle',
-                                'cancelled' => 'danger',
-                                default => 'subtle'
-                            }">
-                                {{ __(ucfirst($season->status)) }}
-                            </flux:badge>
-                        </dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Teilnehmer') }}</dt>
-                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {{ $season->participants->count() }} / {{ $season->max_players }} {{ __('Spieler') }}
-                        </dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Modus') }}</dt>
-                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {{ match($season->mode) {
-                                'single_round' => __('Nur Hinrunde'),
-                                'double_round' => __('Hin & Rückrunde'),
-                                default => $season->mode
-                            } }}
-                        </dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Spielformat') }}</dt>
-                        <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {{ match($season->match_format) {
-                                'best_of_3' => 'Best of 3',
-                                'best_of_5' => 'Best of 5',
-                                default => $season->match_format
-                            } }}
-                        </dd>
-                    </div>
-                </dl>
-            </div>
-
             @if ($nextMatchday || $relevantMatchdays->isNotEmpty())
+                {{-- Grid mit Saison-Informationen und Schnelleinstieg --}}
+                <div class="grid gap-6 md:grid-cols-2">
+                    {{-- Saison-Informationen --}}
+                    <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                        <flux:heading size="lg" class="mb-4">{{ __('Saison-Informationen') }}</flux:heading>
+
+                        <dl class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</dt>
+                                <dd class="mt-1">
+                                    <flux:badge :variant="match($season->status) {
+                                        'registration' => 'primary',
+                                        'active' => 'success',
+                                        'completed' => 'subtle',
+                                        'cancelled' => 'danger',
+                                        default => 'subtle'
+                                    }">
+                                        {{ __(ucfirst($season->status)) }}
+                                    </flux:badge>
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Teilnehmer') }}</dt>
+                                <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                    {{ $season->participants->count() }} / {{ $season->max_players }} {{ __('Spieler') }}
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Modus') }}</dt>
+                                <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                    {{ match($season->mode) {
+                                        'single_round' => __('Nur Hinrunde'),
+                                        'double_round' => __('Hin & Rückrunde'),
+                                        default => $season->mode
+                                    } }}
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Spielformat') }}</dt>
+                                <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                    {{ match($season->match_format) {
+                                        'best_of_3' => 'Best of 3',
+                                        'best_of_5' => 'Best of 5',
+                                        default => $season->match_format
+                                    } }}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    {{-- Schnelleinstieg --}}
                 @php
                     $hasUncompletedMatchday = false;
                     if ($nextMatchday) {
@@ -721,82 +868,63 @@ new class extends Component {
                         @endif
                     </div>
                 </div>
+                </div>
+            @else
+                {{-- Nur Saison-Informationen, wenn kein Spieltag ansteht --}}
+                <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                    <flux:heading size="lg" class="mb-4">{{ __('Saison-Informationen') }}</flux:heading>
+
+                    <dl class="grid gap-4 md:grid-cols-2">
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</dt>
+                            <dd class="mt-1">
+                                <flux:badge :variant="match($season->status) {
+                                    'registration' => 'primary',
+                                    'active' => 'success',
+                                    'completed' => 'subtle',
+                                    'cancelled' => 'danger',
+                                    default => 'subtle'
+                                }">
+                                    {{ __(ucfirst($season->status)) }}
+                                </flux:badge>
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Teilnehmer') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                {{ $season->participants->count() }} / {{ $season->max_players }} {{ __('Spieler') }}
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Modus') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                {{ match($season->mode) {
+                                    'single_round' => __('Nur Hinrunde'),
+                                    'double_round' => __('Hin & Rückrunde'),
+                                    default => $season->mode
+                                } }}
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Spielformat') }}</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                {{ match($season->match_format) {
+                                    'best_of_3' => 'Best of 3',
+                                    'best_of_5' => 'Best of 5',
+                                    default => $season->match_format
+                                } }}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
             @endif
 
+            {{-- Season Standings --}}
             @if ($myParticipant)
-                <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                    <flux:heading size="lg" class="mb-4">{{ __('Deine Position') }}</flux:heading>
-
-                    <div class="grid gap-4 md:grid-cols-4">
-                        <div class="text-center">
-                            <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                                {{ $myParticipant->final_position ?? '-' }}
-                            </div>
-                            <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Platz') }}</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                                {{ $myParticipant->points }}
-                            </div>
-                            <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Punkte') }}</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="text-3xl font-bold text-green-600 dark:text-green-400">
-                                {{ $myParticipant->matches_won }}
-                            </div>
-                            <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Siege') }}</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                                {{ $myParticipant->legs_won }}:{{ $myParticipant->legs_lost }}
-                            </div>
-                            <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Legs') }}</div>
-                        </div>
-                    </div>
-                </div>
-
-                @if ($myFixtures->where('status', 'scheduled')->count() > 0)
-                    <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                        <flux:heading size="lg" class="mb-4">{{ __('Anstehende Spiele') }}</flux:heading>
-
-                        <div class="space-y-2">
-                            @foreach ($myFixtures->where('status', 'scheduled')->take(3) as $fixture)
-                                <div wire:key="upcoming-fixture-{{ $fixture->id }}" class="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
-                                    <div class="flex-1">
-                                        <span class="font-medium {{ $fixture->home_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                            @if ($fixture->homePlayer?->user)
-                                                <a href="{{ route('users.show', $fixture->homePlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-                                                    {{ $fixture->homePlayer->name }}
-                                                </a>
-                                            @else
-                                                {{ $fixture->homePlayer->name }}
-                                            @endif
-                                        </span>
-                                        <span class="mx-2 text-zinc-500">vs</span>
-                                        <span class="font-medium {{ $fixture->away_player_id == $playerId ? 'text-blue-600 dark:text-blue-400' : '' }}">
-                                            @if ($fixture->awayPlayer?->user)
-                                                <a href="{{ route('users.show', $fixture->awayPlayer->user) }}" target="_blank" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-                                                    {{ $fixture->awayPlayer->name }}
-                                                </a>
-                                            @else
-                                                {{ $fixture->awayPlayer->name }}
-                                            @endif
-                                        </span>
-                                    </div>
-
-                                    @if ($fixture->matchday->deadline_at)
-                                        <div class="text-sm text-zinc-500">
-                                            {{ __('bis :date', ['date' => $fixture->matchday->deadline_at->format('d.m.')]) }}
-                                        </div>
-                                    @endif
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
+                <livewire:season-standings-single :season="$season" />
             @endif
         </div>
     @endif
@@ -824,7 +952,38 @@ new class extends Component {
                                 @php
                                     // Prüfe nur News, die speziell für den Spieltag sind (ohne Fixture)
                                     $matchdayNews = $matchday->news->firstWhere('matchday_fixture_id', null);
+                                    $scheduledFixturesCount = $matchday->fixtures->where('status', 'scheduled')->whereNull('dart_match_id')->count();
+                                    $isProduction = app()->environment('production');
                                 @endphp
+                                @if ($scheduledFixturesCount > 0)
+                                    @if ($isProduction)
+                                        <flux:button
+                                            size="sm"
+                                            variant="outline"
+                                            icon="play"
+                                            disabled
+                                            title="{{ __('Simulation ist in Production nicht verfügbar') }}"
+                                        >
+                                            {{ __('Alle simulieren (:count)', ['count' => $scheduledFixturesCount]) }}
+                                        </flux:button>
+                                    @else
+                                        <flux:button
+                                            size="sm"
+                                            variant="outline"
+                                            icon="play"
+                                            wire:click="simulateMatchday({{ $matchday->id }})"
+                                            wire:loading.attr="disabled"
+                                            wire:target="simulateMatchday({{ $matchday->id }})"
+                                        >
+                                            <span wire:loading.remove wire:target="simulateMatchday({{ $matchday->id }})">
+                                                {{ __('Alle simulieren (:count)', ['count' => $scheduledFixturesCount]) }}
+                                            </span>
+                                            <span wire:loading wire:target="simulateMatchday({{ $matchday->id }})">
+                                                {{ __('Simuliere...') }}
+                                            </span>
+                                        </flux:button>
+                                    @endif
+                                @endif
                                 @if ($matchdayNews)
                                     <flux:button
                                         size="sm"
@@ -909,6 +1068,33 @@ new class extends Component {
                                         <flux:badge size="sm" :variant="$fixture->status === 'overdue' ? 'danger' : 'subtle'">
                                             {{ __(ucfirst($fixture->status)) }}
                                         </flux:badge>
+                                        @if ($fixture->status === 'scheduled' && ($season->isAdmin(Auth::user()) || $season->league->isAdmin(Auth::user())))
+                                            @if (app()->environment('production'))
+                                                <flux:button
+                                                    size="xs"
+                                                    variant="outline"
+                                                    disabled
+                                                    title="{{ __('Simulation ist in Production nicht verfügbar') }}"
+                                                >
+                                                    {{ __('Simulieren') }}
+                                                </flux:button>
+                                            @else
+                                                <flux:button
+                                                    size="xs"
+                                                    variant="outline"
+                                                    wire:click="simulateFixture({{ $fixture->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="simulateFixture({{ $fixture->id }})"
+                                                >
+                                                    <span wire:loading.remove wire:target="simulateFixture({{ $fixture->id }})">
+                                                        {{ __('Simulieren') }}
+                                                    </span>
+                                                    <span wire:loading wire:target="simulateFixture({{ $fixture->id }})">
+                                                        {{ __('Simuliere...') }}
+                                                    </span>
+                                                </flux:button>
+                                            @endif
+                                        @endif
                                     @endif
                                 </div>
                             </div>
