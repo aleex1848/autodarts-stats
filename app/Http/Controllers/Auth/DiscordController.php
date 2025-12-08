@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\RoleName;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -73,6 +74,11 @@ class DiscordController extends Controller
                     'discord_id' => $discordId,
                 ]
             );
+
+            // Assign "Spieler" role to newly created users
+            if ($user->wasRecentlyCreated && ! $user->hasRole(RoleName::Spieler->value)) {
+                $user->assignRole(RoleName::Spieler->value);
+            }
 
             // Update user name, discord_username and discord_id if they changed
             $newName = $discordUser->getName() ?? $discordUsername;

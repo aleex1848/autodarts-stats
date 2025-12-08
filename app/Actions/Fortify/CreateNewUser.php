@@ -2,6 +2,7 @@
 
 namespace App\Actions\Fortify;
 
+use App\Enums\RoleName;
 use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -31,11 +32,15 @@ class CreateNewUser implements CreatesNewUsers
             'discord_username' => ['nullable', 'string', 'max:255'],
         ])->validate();
 
-        return User::create([
+        $user = User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
             'discord_username' => $input['discord_username'] ?? null,
         ]);
+
+        $user->assignRole(RoleName::Spieler->value);
+
+        return $user;
     }
 }
