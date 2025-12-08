@@ -19,4 +19,5 @@ enum PermissionName: string
     case LeaguesUpdate = 'leagues.update';
     case LeaguesDelete = 'leagues.delete';
     case LeaguesManage = 'leagues.manage';
+    case CanCreateLeague = 'can_create_league';
 }

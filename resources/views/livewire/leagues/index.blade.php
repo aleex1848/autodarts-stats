@@ -41,11 +41,19 @@ new class extends Component {
 }; ?>
 
 <section class="w-full space-y-6">
-    <div>
-        <flux:heading size="xl">{{ __('Ligen') }}</flux:heading>
-        <flux:subheading>
-            {{ __('Alle verfügbaren Ligen') }}
-        </flux:subheading>
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <flux:heading size="xl">{{ __('Ligen') }}</flux:heading>
+            <flux:subheading>
+                {{ __('Alle verfügbaren Ligen') }}
+            </flux:subheading>
+        </div>
+
+        @can('create', App\Models\League::class)
+            <flux:button icon="plus" variant="primary" :href="route('leagues.create')" wire:navigate>
+                {{ __('Neue Liga') }}
+            </flux:button>
+        @endcan
     </div>
 
     @if (!$player)

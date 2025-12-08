@@ -62,6 +62,9 @@ Route::middleware(['auth', 'verified'])
             ->name('matches.show');
 
         Volt::route('leagues', 'leagues.index')->name('leagues.index');
+        Volt::route('leagues/create', 'leagues.create')
+            ->middleware('can:create,App\Models\League')
+            ->name('leagues.create');
         Volt::route('leagues/{league}', 'leagues.show')
             ->middleware('can:view,league')
             ->name('leagues.show');

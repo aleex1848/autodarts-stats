@@ -48,6 +48,33 @@ new class extends Component {
         $this->resetPage();
     }
 
+    public function updatedSelectedPermissions($value): void
+    {
+        // Normalisiere den Wert zu einem Array
+        $this->normalizeSelectedPermissions();
+    }
+
+    protected function normalizeSelectedPermissions(): void
+    {
+        if (! is_array($this->selectedPermissions)) {
+            if (is_null($this->selectedPermissions) || $this->selectedPermissions === '') {
+                $this->selectedPermissions = [];
+            } else {
+                // Konvertiere zu String-Array, da Pillbox Strings sendet
+                $value = (string) $this->selectedPermissions;
+                $this->selectedPermissions = $value !== '' ? [$value] : [];
+            }
+        } else {
+            // Filtere leere Werte heraus und konvertiere zu Strings
+            $this->selectedPermissions = array_values(
+                array_filter(
+                    array_map('strval', $this->selectedPermissions),
+                    fn($v) => $v !== '' && $v !== null && $v !== '0'
+                )
+            );
+        }
+    }
+
     public function with(): array
     {
         $permissionsQuery = Permission::query()->with('roles');
@@ -67,8 +94,6 @@ new class extends Component {
     {
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.roles'), 'name')->ignore($this->editingRoleId)],
-            'selectedPermissions' => ['nullable', 'array'],
-            'selectedPermissions.*' => ['string', Rule::exists(config('permission.table_names.permissions'), 'name')],
             'permissionName' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.permissions'), 'name')->ignore($this->editingPermissionId)],
         ];
     }
@@ -77,6 +102,10 @@ new class extends Component {
     public function openCreateModal(): void
     {
         $this->resetRoleForm();
+        // Stelle sicher, dass selectedPermissions ein Array ist
+        if (! is_array($this->selectedPermissions)) {
+            $this->selectedPermissions = [];
+        }
         $this->showRoleFormModal = true;
     }
 
@@ -87,15 +116,44 @@ new class extends Component {
         $this->editingRoleId = $role->id;
         $this->name = $role->name;
         $this->selectedPermissions = $role->permissions->pluck('name')->values()->toArray();
+        $this->normalizeSelectedPermissions();
         $this->isProtectedRole = $role->name === RoleName::SuperAdmin->value;
         $this->showRoleFormModal = true;
     }
 
     public function saveRole(): void
     {
-        $validated = $this->validate();
-        $permissions = $validated['selectedPermissions'] ?? [];
-        unset($validated['selectedPermissions']);
+        // Stelle sicher, dass selectedPermissions immer ein Array ist
+        if (! is_array($this->selectedPermissions)) {
+            $this->selectedPermissions = [];
+        }
+        
+        // Normalisiere selectedPermissions
+        $this->normalizeSelectedPermissions();
+        
+        // Validiere nur das name-Feld, selectedPermissions wird separat behandelt
+        $validated = $this->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique(config('permission.table_names.roles'), 'name')->ignore($this->editingRoleId)],
+        ]);
+        
+        // Validiere Permissions manuell
+        $permissions = [];
+        if (! empty($this->selectedPermissions) && is_array($this->selectedPermissions)) {
+            $validPermissions = Permission::query()
+                ->whereIn('name', $this->selectedPermissions)
+                ->pluck('name')
+                ->toArray();
+            
+            $invalidPermissions = array_diff($this->selectedPermissions, $validPermissions);
+            
+            if (! empty($invalidPermissions)) {
+                $this->addError('selectedPermissions', __('Die folgenden Berechtigungen existieren nicht: :permissions', ['permissions' => implode(', ', $invalidPermissions)]));
+                
+                return;
+            }
+            
+            $permissions = $this->selectedPermissions;
+        }
 
         if ($this->isProtectedRole) {
             $validated['name'] = RoleName::SuperAdmin->value;
@@ -165,7 +223,8 @@ new class extends Component {
 
     protected function resetRoleForm(): void
     {
-        $this->reset('editingRoleId', 'name', 'selectedPermissions', 'isProtectedRole');
+        $this->reset('editingRoleId', 'name', 'isProtectedRole');
+        $this->selectedPermissions = [];
     }
 
     // Permission methods
@@ -449,7 +508,17 @@ new class extends Component {
             </flux:subheading>
         </div>
 
-        <form wire:submit="saveRole" class="space-y-4">
+        <form wire:submit.prevent="saveRole" class="space-y-4">
+            @if ($errors->any())
+                <flux:callout variant="danger" icon="exclamation-triangle">
+                    <ul class="list-disc list-inside">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </flux:callout>
+            @endif
+
             <flux:input
                 wire:model="name"
                 :label="__('Name')"
@@ -457,9 +526,13 @@ new class extends Component {
                 required
                 :disabled="$isProtectedRole"
             />
+            @error('name')
+                <flux:error>{{ $message }}</flux:error>
+            @enderror
 
             <flux:pillbox
                 wire:model="selectedPermissions"
+                multiple
                 :label="__('Berechtigungen')"
                 searchable
                 :placeholder="__('Berechtigungen auswählen...')"
@@ -472,6 +545,12 @@ new class extends Component {
                     </flux:pillbox.option>
                 @endforeach
             </flux:pillbox>
+            @error('selectedPermissions')
+                <flux:error>{{ $message }}</flux:error>
+            @enderror
+            @error('selectedPermissions.*')
+                <flux:error>{{ $message }}</flux:error>
+            @enderror
 
             <div class="flex justify-end gap-2">
                 <flux:button type="button" variant="ghost" wire:click="$set('showRoleFormModal', false)">

@@ -32,7 +32,7 @@ class LeaguePolicy
         return $user->hasAnyRole([
             RoleName::SuperAdmin->value,
             RoleName::Admin->value,
-        ]);
+        ]) || $user->hasPermissionTo('can_create_league');
     }
 
     /**

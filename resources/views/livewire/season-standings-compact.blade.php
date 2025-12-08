@@ -77,7 +77,7 @@ new class extends \Livewire\Volt\Component {
 };
 
 ?>
-
+<div>
 @if($seasons->isNotEmpty())
     <div class="space-y-4">
         @foreach($seasons as $data)
@@ -169,3 +169,4 @@ new class extends \Livewire\Volt\Component {
         @endforeach
     </div>
 @endif
+</div>
