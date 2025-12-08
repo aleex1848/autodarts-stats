@@ -48,15 +48,31 @@
     $range = $maxValue - $minValue;
     $range = $range > 0 ? $range : 1;
 
-    $width = 800;
-    $height = 200;
-    $padding = 40;
-    $chartWidth = $width - ($padding * 2);
-    $chartHeight = $height - ($padding * 2);
+    // Basis-Dimensionen für das Diagramm
+    $baseWidth = 800;
+    $baseHeight = 200;
+    
+    // Padding-Werte - genug Platz für alle Labels
+    $paddingLeft = 60; // Platz für Y-Achsen-Labels
+    $paddingRight = 80; // Platz für X-Achsen-Labels rechts
+    $paddingTop = 40;
+    $paddingBottom = 80; // Platz für X-Achsen-Labels unten
+    
+    // Tatsächliche Diagramm-Dimensionen
+    $width = $baseWidth;
+    $height = $baseHeight;
+    $chartWidth = $width - $paddingLeft - $paddingRight;
+    $chartHeight = $height - $paddingTop - $paddingBottom;
+    
+    // ViewBox muss alle Elemente einschließen, inklusive Labels
+    $viewBoxX = 0;
+    $viewBoxY = 0;
+    $viewBoxWidth = $width + 40; // Extra Breite rechts für Labels
+    $viewBoxHeight = $height + 40; // Extra Höhe unten für Labels
 @endphp
 
-<div class="w-full overflow-x-auto text-neutral-500 dark:text-neutral-100">
-    <svg viewBox="0 0 {{ $width }} {{ $height }}" class="w-full" preserveAspectRatio="none">
+<div class="w-full text-neutral-500 dark:text-neutral-100 px-2">
+    <svg viewBox="{{ $viewBoxX }} {{ $viewBoxY }} {{ $viewBoxWidth }} {{ $viewBoxHeight }}" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
         {{-- Grid Lines --}}
         @php
             // Berechne alle Y-Achsen-Werte vorher, um Duplikate zu vermeiden
@@ -86,7 +102,7 @@
                 if ($roundedValue !== $lastValue) {
                     $yAxisValues[] = [
                         'i' => $i,
-                        'y' => $padding + ($chartHeight / 4) * $i,
+                        'y' => $paddingTop + ($chartHeight / 4) * $i,
                         'value' => $roundedValue,
                         'rawValue' => $value,
                     ];
@@ -97,16 +113,16 @@
         
         @foreach($yAxisValues as $axisData)
             <line
-                x1="{{ $padding }}"
+                x1="{{ $paddingLeft }}"
                 y1="{{ $axisData['y'] }}"
-                x2="{{ $width - $padding }}"
+                x2="{{ $width - $paddingRight }}"
                 y2="{{ $axisData['y'] }}"
                 stroke="currentColor"
                 stroke-width="0.5"
                 opacity="0.2"
             />
             <text
-                x="{{ $padding - 10 }}"
+                x="{{ $paddingLeft - 15 }}"
                 y="{{ $axisData['y'] + 4 }}"
                 text-anchor="end"
                 class="text-xs"
@@ -131,13 +147,13 @@
                 $lastMatchday = $chartData->last()['matchday_number'] ?? 1;
                 $matchdayRange = max(1, $lastMatchday - $firstMatchday);
                 
-                $points = $chartData->map(function ($item, $index) use ($chartData, $minValue, $maxValue, $range, $padding, $chartWidth, $chartHeight, $inverted, $firstMatchday, $lastMatchday, $matchdayRange) {
+                $points = $chartData->map(function ($item, $index) use ($chartData, $minValue, $maxValue, $range, $paddingLeft, $paddingTop, $paddingBottom, $chartWidth, $chartHeight, $inverted, $firstMatchday, $lastMatchday, $matchdayRange) {
                     // X-Position basierend auf Spieltag-Nummer (nicht Index)
                     // Wenn nur ein Datenpunkt: zentriert
                     if ($matchdayRange === 0) {
-                        $x = $padding + ($chartWidth / 2);
+                        $x = $paddingLeft + ($chartWidth / 2);
                     } else {
-                        $x = $padding + (($item['matchday_number'] - $firstMatchday) / $matchdayRange) * $chartWidth;
+                        $x = $paddingLeft + (($item['matchday_number'] - $firstMatchday) / $matchdayRange) * $chartWidth;
                     }
                     
                     if ($inverted ?? false) {
@@ -148,7 +164,7 @@
                         $normalized = ($item['value'] - $minValue) / $range;
                     }
                     
-                    $y = $padding + $chartHeight - ($normalized * $chartHeight);
+                    $y = $paddingTop + $chartHeight - ($normalized * $chartHeight);
                     
                     return [
                         'x' => $x,
@@ -226,7 +242,7 @@
                 @if($showLabel)
                     <text
                         x="{{ $point['x'] }}"
-                        y="{{ $height - $padding + 20 }}"
+                        y="{{ $height - $paddingBottom + 25 }}"
                         text-anchor="middle"
                         class="text-xs"
                         fill="currentColor"
@@ -240,10 +256,10 @@
 
         {{-- Y-Axis Line --}}
         <line
-            x1="{{ $padding }}"
-            y1="{{ $padding }}"
-            x2="{{ $padding }}"
-            y2="{{ $height - $padding }}"
+            x1="{{ $paddingLeft }}"
+            y1="{{ $paddingTop }}"
+            x2="{{ $paddingLeft }}"
+            y2="{{ $height - $paddingBottom }}"
             stroke="currentColor"
             stroke-width="1"
             opacity="0.3"
@@ -256,20 +272,20 @@
                 $lastPoint = $points->last();
             @endphp
             <line
-                x1="{{ $firstPoint['x'] ?? $padding }}"
-                y1="{{ $height - $padding }}"
-                x2="{{ $lastPoint['x'] ?? ($width - $padding) }}"
-                y2="{{ $height - $padding }}"
+                x1="{{ $firstPoint['x'] ?? $paddingLeft }}"
+                y1="{{ $height - $paddingBottom }}"
+                x2="{{ $lastPoint['x'] ?? ($width - $paddingRight) }}"
+                y2="{{ $height - $paddingBottom }}"
                 stroke="currentColor"
                 stroke-width="1"
                 opacity="0.3"
             />
         @else
             <line
-                x1="{{ $padding }}"
-                y1="{{ $height - $padding }}"
-                x2="{{ $width - $padding }}"
-                y2="{{ $height - $padding }}"
+                x1="{{ $paddingLeft }}"
+                y1="{{ $height - $paddingBottom }}"
+                x2="{{ $width - $paddingRight }}"
+                y2="{{ $height - $paddingBottom }}"
                 stroke="currentColor"
                 stroke-width="1"
                 opacity="0.3"

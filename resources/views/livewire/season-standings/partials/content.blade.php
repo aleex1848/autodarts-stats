@@ -3,6 +3,7 @@
     $participant = $data['participant'];
 @endphp
 
+
 <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         {{-- Statistik-Grid --}}
         <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -145,9 +146,9 @@
                     <flux:tab name="ratio">{{ __('Win/Loss') }}</flux:tab>
                 </flux:tabs>
 
-                <div class="mt-4">
+                <div class="mt-4 -mx-2">
                     {{-- Average Chart --}}
-                    <div x-show="activeTab === 'average'" x-transition class="h-64">
+                    <div x-show="activeTab === 'average'" x-transition class="h-64 px-4">
                         @include('livewire.season-standings.partials.chart', [
                             'data' => $data['progressData'] ?? [],
                             'key' => 'season_average',
@@ -157,7 +158,7 @@
                     </div>
 
                     {{-- Game-Average Chart --}}
-                    <div x-show="activeTab === 'game-average'" x-transition class="h-64">
+                    <div x-show="activeTab === 'game-average'" x-transition class="h-64 px-4">
                         @include('livewire.season-standings.partials.chart', [
                             'data' => $data['progressData'] ?? [],
                             'key' => 'game_average',
@@ -167,7 +168,7 @@
                     </div>
 
                     {{-- Position Chart --}}
-                    <div x-show="activeTab === 'position'" x-transition class="h-64">
+                    <div x-show="activeTab === 'position'" x-transition class="h-64 px-4">
                         @include('livewire.season-standings.partials.chart', [
                             'data' => $data['progressData'],
                             'key' => 'position',
@@ -178,7 +179,7 @@
                     </div>
 
                     {{-- Win/Loss Ratio Chart --}}
-                    <div x-show="activeTab === 'ratio'" x-transition class="h-64">
+                    <div x-show="activeTab === 'ratio'" x-transition class="h-64 px-4">
                         @include('livewire.season-standings.partials.chart', [
                             'data' => $data['progressData'],
                             'key' => 'win_loss_ratio',
@@ -190,15 +191,5 @@
             </div>
         @endif
 
-    {{-- Nächstes Spiel --}}
-    @if($data['nextFixture'])
-        <div class="mt-6 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-zinc-800">
-            <flux:heading size="sm" class="mb-2">
-                {{ __('Nächstes Spiel') }}
-            </flux:heading>
-            <flux:text size="sm">
-                {{ __('Spieltag :number', ['number' => $data['nextFixture']->matchday_number]) }}
-            </flux:text>
-        </div>
-    @endif
+   
 </div>
