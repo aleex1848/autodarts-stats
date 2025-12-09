@@ -18,6 +18,8 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+Route::view('datenschutz', 'privacy-policy')->name('privacy-policy');
+
 Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');

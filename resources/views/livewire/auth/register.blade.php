@@ -59,6 +59,18 @@
                 viewable
             />
 
+            <!-- Privacy Policy Acceptance -->
+            <div class="flex items-start gap-2">
+                <flux:checkbox
+                    name="privacy_accepted"
+                    required
+                    :checked="old('privacy_accepted')"
+                />
+                <label for="privacy_accepted" class="text-sm text-zinc-600 dark:text-zinc-400">
+                    {!! __('Ich akzeptiere die :link', ['link' => '<a href="'.route('privacy-policy').'" target="_blank" class="text-primary-600 dark:text-primary-400 hover:underline">'.__('Datenschutzerklärung').'</a>']) !!}
+                </label>
+            </div>
+
             <div class="flex items-center justify-end">
                 <flux:button type="submit" variant="primary" class="w-full" data-test="register-user-button">
                     {{ __('Create account') }}

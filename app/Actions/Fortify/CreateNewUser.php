@@ -30,6 +30,7 @@ class CreateNewUser implements CreatesNewUsers
             ],
             'password' => $this->passwordRules(),
             'discord_username' => ['nullable', 'string', 'max:255'],
+            'privacy_accepted' => ['required', 'accepted'],
         ])->validate();
 
         $user = User::create([
