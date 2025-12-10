@@ -211,33 +211,15 @@ new class extends Component
                         <p class="font-medium">{{ __('So funktioniert die Identifizierung:') }}</p>
                         <ol class="mt-2 list-decimal space-y-2 ps-5 text-sm">
                             <li>
-                                {{ __('Aktuelle Version Tools-For-Autodarts muss zwingend installiert sein.') }}
+                                {{ __('Aktuelle Version der autodarts-liga.de Browser Extension muss zwingend installiert sein.') }}
                                 <a 
-                                    href="https://github.com/creazy231/tools-for-autodarts/releases" 
+                                    href="https://github.com/aleex1848/autodarts-liga-extension/releases" 
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     class="ml-1 text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                                 >
                                     {{ __('Github') }}
-                                </a>
-                                <span class="mx-1">|</span>
-                                <a 
-                                    href="https://github.com/creazy231/tools-for-autodarts#-browser-extensions" 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    class="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                >
-                                    {{ __('Browser Extensions') }}
-                                </a>
-                                <span class="mx-1">|</span>
-                                <a 
-                                    href="https://www.youtube.com/watch?v=uznl9u2OZH8" 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    class="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                >
-                                    {{ __('Anleitung') }}
-                                </a>
+                                </a>                                                              
                             </li>
                             <li>
                                 {{ __('Tools öffnen und auf dem Reiter Webhooks die URL und den Token eintragen.') }}
@@ -325,7 +307,7 @@ new class extends Component
                             <div>
                                 <flux:heading size="lg">{{ __('Webhook-Konfiguration') }}</flux:heading>
                                 <flux:text class="mt-2">
-                                    {{ __('Trage diese Werte in Tools-For-Autodarts ein:') }}
+                                    {{ __('Trage diese Werte in der autodarts-liga.de Browser Extension ein:') }}
                                 </flux:text>
                             </div>
 
