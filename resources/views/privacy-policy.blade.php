@@ -17,9 +17,9 @@
                     Verantwortlicher im Sinne der DSGVO:
                 </p>
                 <p>
-                    Alexander Dieckmann<br>
-                    Kreuzweg 13, 58099 Hagen<br>
-                    alexdieckmann@gmail.com
+                    Volker Racho<br>
+                    Mittelstr. 12, 76698 Zeutern<br>
+                    volker.racho@gmail.com
                 </p>
 
                 <h2>3. Erhobene Daten</h2>
